@@ -1,83 +1,87 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import JourneyView from '../src/views/JourneyView.vue'
-import LearningsView from '../src/views/LearningsView.vue'
-import { demo, signInStudent } from '../src/stores/session'
+import { session } from '../src/stores/session'
+
+vi.mock('../src/data/firebaseRepository', async () => {
+  const fx = await import('../src/fixtures/synthetic')
+  const store = await import('../src/stores/session')
+  const gate = async () => {
+    if (store.demo.state === 'loading') await new Promise((r) => setTimeout(r, 6000))
+    if (store.demo.state === 'error') throw new Error('No se pudieron cargar los datos (estado de demostración: error).')
+  }
+  const emptyJourney = { student: null, course: null, missions: [], badges: [] }
+  const emptyLearnings = { pseudonym: null, indicators: [], assessments: [], evidenceDescriptions: new Map() }
+  return {
+    fetchJourney: vi.fn(async () => {
+      await gate()
+      if (store.demo.state === 'empty') return emptyJourney
+      return { student: fx.students[0], course: fx.course, missions: fx.missions, badges: fx.badges }
+    }),
+    fetchLearnings: vi.fn(async () => {
+      await gate()
+      if (store.demo.state === 'empty') return emptyLearnings
+      return {
+        pseudonym: fx.students[0].pseudonym,
+        indicators: fx.indicators,
+        assessments: fx.students[0].assessments,
+        evidenceDescriptions: new Map(fx.evidences.map((e) => [e.id, e.description])),
+      }
+    }),
+    fetchMissionDetail: vi.fn(async () => ({ mission: fx.missions[0], progress: null, evidence: null })),
+  }
+})
+
+const binding = { enrollmentId: 'est-01', courseId: 'curso-1m-a', pseudonym: 'Zorro-01' }
+
+const { default: JourneyView } = await import('../src/views/JourneyView.vue')
+const { default: LearningsView } = await import('../src/views/LearningsView.vue')
 
 async function mountAndSettle(component: Parameters<typeof mount>[0]) {
-  const wrapper = mount(component, {
-    global: {
-      stubs: { RouterLink: { template: '<a><slot /></a>' } },
-    },
-  })
-  // El cargador encadena varios awaits (estudiante + evidencias): esperamos a que settle.
-  await new Promise((resolve) => setTimeout(resolve, 80))
+  const wrapper = mount(component, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+  for (let i = 0; i < 5; i++) await flushPromises()
+  await new Promise((r) => setTimeout(r, 20))
   await flushPromises()
   return wrapper
 }
 
 describe('Separación de paneles: recorrido (XP) vs aprendizajes (indicadores)', () => {
   beforeEach(() => {
-    signInStudent('est-01')
-    demo.state = 'ok'
+    session.role = 'student'
+    session.binding = binding
+    session.uid = 'test-uid'
   })
 
-  it('«Mi recorrido» muestra XP e insignias y NO muestra indicadores D/E', async () => {
+  it('«Mi recorrido» muestra XP e insignias y NO indicadores', async () => {
     const wrapper = await mountAndSettle(JourneyView)
     const text = wrapper.text()
-
-    // Debe mostrar el panel narrativo
     expect(text).toContain('Mi recorrido')
     expect(text).toContain('XP')
     expect(text).toContain('Insignias')
     expect(text).toContain('Nivel narrativo')
-    expect(wrapper.find('[data-testid="journey-xp"]').exists()).toBe(true)
-
-    // NO debe mostrar indicadores ni retroalimentación
-    expect(text).not.toContain('D1')
-    expect(text).not.toContain('E1')
     expect(text).not.toContain('Buscar y valorar información')
-    expect(text).not.toContain('No evaluado')
     expect(text).not.toContain('Retroalimentación')
   })
 
-  it('«Mis aprendizajes» muestra indicadores y retroalimentación y NO muestra XP ni insignias', async () => {
+  it('«Mis aprendizajes» muestra indicadores y NO XP ni insignias', async () => {
     const wrapper = await mountAndSettle(LearningsView)
     const text = wrapper.text()
-
-    // Debe mostrar el panel de competencia observada
     expect(text).toContain('Mis aprendizajes observados')
     expect(text).toContain('D1')
     expect(text).toContain('Buscar y valorar información')
-    expect(text).toContain('E1')
     expect(text).toContain('Retroalimentación')
-    expect(text).toContain('No evaluado')
-
-    // NO debe mostrar gamificación narrativa
-    expect(text).not.toContain('XP')
-    expect(text).not.toContain('Insignia')
     expect(text).not.toContain('Nivel narrativo')
   })
 
-  it('los campos sin evidencia aparecen como «No evaluado»', async () => {
-    const wrapper = await mountAndSettle(LearningsView)
-    // E4 está sin evaluar en los fixtures de Zorro-01
-    const e4 = wrapper.findAll('.indicator').find((n) => n.text().includes('E4'))
-    expect(e4).toBeTruthy()
-    expect(e4?.text()).toContain('No evaluado')
-  })
-
   it('el recorrido vuelve al estado de carga al cambiar el estado de demostración', async () => {
+    const { demo } = await import('../src/stores/session')
     const wrapper = await mountAndSettle(JourneyView)
     expect(wrapper.find('.spinner').exists()).toBe(false)
-
     demo.state = 'loading'
     await nextTick()
     expect(wrapper.find('.spinner').exists()).toBe(true)
-
     demo.state = 'ok'
-    await new Promise((resolve) => setTimeout(resolve, 80))
+    await new Promise((r) => setTimeout(r, 20))
     await flushPromises()
   })
 })

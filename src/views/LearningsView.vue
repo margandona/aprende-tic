@@ -1,34 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAsync } from '../composables/useAsync'
-import { getEvidence, getStudent } from '../data/repository'
-import { indicators } from '../fixtures/synthetic'
+import { fetchLearnings } from '../data/firebaseRepository'
 import { demo, session } from '../stores/session'
 import { indicatorAxisLabels, indicatorLevelLabels } from '../utils/labels'
 import StatePanel from '../components/StatePanel.vue'
 import type { Assessment } from '../types'
 
-const { data, loading, error } = useAsync(async () => {
-  const student = await getStudent(session.studentId ?? '')
-  const assessments = student?.assessments ?? []
-  const evidenceDescriptions = new Map<string, string>()
-  for (const a of assessments) {
-    if (a.evidenceId && !evidenceDescriptions.has(a.evidenceId)) {
-      const ev = await getEvidence(a.evidenceId)
-      if (ev) evidenceDescriptions.set(a.evidenceId, ev.description)
-    }
-  }
-  return { student, assessments, evidenceDescriptions }
-}, () => [session.studentId, demo.state])
+const { data, loading, error } = useAsync(() => fetchLearnings(), () => [session.binding?.enrollmentId, demo.state])
 
-const student = computed(() => data.value?.student ?? null)
+const pseudonym = computed(() => data.value?.pseudonym ?? null)
+const indicators = computed(() => data.value?.indicators ?? [])
 const assessmentByCode = computed(() => {
   const map = new Map<string, Assessment>()
   for (const a of data.value?.assessments ?? []) map.set(a.indicatorCode, a)
   return map
 })
-const axisD = computed(() => indicators.filter((i) => i.axis === 'D'))
-const axisE = computed(() => indicators.filter((i) => i.axis === 'E'))
+const axisD = computed(() => indicators.value.filter((i) => i.axis === 'D'))
+const axisE = computed(() => indicators.value.filter((i) => i.axis === 'E'))
 
 function evidenceText(code: string): string | null {
   const a = assessmentByCode.value.get(code)
@@ -48,7 +37,7 @@ function evidenceText(code: string): string | null {
     <StatePanel v-if="loading" state="loading" message="Cargando tus aprendizajes…" />
     <StatePanel v-else-if="error" state="error" :message="error" />
     <StatePanel
-      v-else-if="!student"
+      v-else-if="!pseudonym"
       state="empty"
       message="Aún no hay aprendizajes observados. Cuando entregues una misión, aparecerán aquí."
     />

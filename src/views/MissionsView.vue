@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAsync } from '../composables/useAsync'
-import { getMissions, getStudent } from '../data/repository'
+import { fetchJourney } from '../data/firebaseRepository'
 import { demo, session } from '../stores/session'
 import MissionCard from '../components/MissionCard.vue'
 import StatePanel from '../components/StatePanel.vue'
 
-const { data, loading, error } = useAsync(async () => {
-  const [missions, student] = await Promise.all([
-    getMissions(),
-    getStudent(session.studentId ?? ''),
-  ])
-  return { missions, student }
-}, () => [session.studentId, demo.state])
+const { data, loading, error } = useAsync(() => fetchJourney(), () => [session.binding?.enrollmentId, demo.state])
 
 const missions = computed(() => data.value?.missions ?? [])
 const student = computed(() => data.value?.student ?? null)

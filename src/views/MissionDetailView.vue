@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAsync } from '../composables/useAsync'
-import { getEvidence, getMissions, getStudent } from '../data/repository'
+import { fetchMissionDetail } from '../data/firebaseRepository'
 import { demo, session } from '../stores/session'
 import { missionStateLabels } from '../utils/labels'
 import StatePanel from '../components/StatePanel.vue'
@@ -10,14 +10,10 @@ import StatePanel from '../components/StatePanel.vue'
 const route = useRoute()
 const missionId = computed(() => String(route.params.id))
 
-const { data, loading, error } = useAsync(async () => {
-  const missions = await getMissions()
-  const mission = missions.find((m) => m.id === missionId.value) ?? null
-  const student = await getStudent(session.studentId ?? '')
-  const progress = student?.missions.find((m) => m.missionId === missionId.value) ?? null
-  const evidence = progress?.evidenceId ? await getEvidence(progress.evidenceId) : null
-  return { mission, progress, evidence }
-}, () => [missionId.value, session.studentId, demo.state])
+const { data, loading, error } = useAsync(
+  () => fetchMissionDetail(missionId.value),
+  () => [missionId.value, session.binding?.enrollmentId, demo.state],
+)
 
 const mission = computed(() => data.value?.mission ?? null)
 const progress = computed(() => data.value?.progress ?? null)

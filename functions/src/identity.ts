@@ -28,14 +28,16 @@ export const redeemCode = onCall({ enforceAppCheck: APP_CHECK }, async (request)
   const actorKey = actorKeyFrom(request)
   const hash = hashCode(code)
   const credRef = db.doc(`codeCredentials/${hash}`)
-  // Contador acotado por actor (una sola escritura por actor y ventana).
+  // Contadores acotados: por actor (IP, señal no confiable) y por auth.uid (confiable).
   const rateRef = db.doc(`redeemRate/${hashCode('rate:' + actorKey)}`)
+  const rateUidRef = db.doc(`redeemRate/${hashCode('uid:' + uid)}`)
   const now = Date.now()
   const windowMs = CONSTANTS.rateWindowMinutes * 60 * 1000
 
   const result = await db.runTransaction(async (tx: Transaction): Promise<RedeemFail | RedeemOk> => {
     // ── Lecturas (todas antes de escribir) ──
     const rateSnap = await tx.get(rateRef)
+    const rateUidSnap = await tx.get(rateUidRef)
     const credSnap = await tx.get(credRef)
     const cred = credSnap.exists ? credSnap.data()! : null
     const enrollmentId = (cred?.enrollmentId as string | undefined) ?? null
@@ -48,17 +50,26 @@ export const redeemCode = onCall({ enforceAppCheck: APP_CHECK }, async (request)
     const activeRef = activeUid && activeUid !== uid ? db.doc(`sessionBindings/${activeUid}`) : null
     const activeSnap = activeRef ? await tx.get(activeRef) : null
 
-    // ── Límite transaccional por actor ──
-    const rateData = rateSnap.data()
-    const windowStart = rateData?.windowStart as Timestamp | undefined
-    const withinWindow = windowStart ? now - windowStart.toMillis() < windowMs : false
-    const count = withinWindow ? ((rateData?.count as number) ?? 0) : 0
-    if (count >= CONSTANTS.rateMax) {
+    // ── Límites transaccionales (actor e identidad) ──
+    const window = (snap: { data: () => Record<string, unknown> | undefined }) => {
+      const data = snap.data()
+      const start = data?.windowStart as Timestamp | undefined
+      const within = start ? now - start.toMillis() < windowMs : false
+      return { within, start, count: within ? ((data?.count as number) ?? 0) : 0 }
+    }
+    const actorWindow = window(rateSnap)
+    const uidWindow = window(rateUidSnap)
+    if (actorWindow.count >= CONSTANTS.rateMaxActor || uidWindow.count >= CONSTANTS.rateMax) {
       return { status: 'rate_limited' }
     }
     tx.set(rateRef, {
-      windowStart: withinWindow && windowStart ? windowStart : Timestamp.fromMillis(now),
-      count: count + 1,
+      windowStart: actorWindow.within && actorWindow.start ? actorWindow.start : Timestamp.fromMillis(now),
+      count: actorWindow.count + 1,
+      updatedAt: Timestamp.now(),
+    })
+    tx.set(rateUidRef, {
+      windowStart: uidWindow.within && uidWindow.start ? uidWindow.start : Timestamp.fromMillis(now),
+      count: uidWindow.count + 1,
       updatedAt: Timestamp.now(),
     })
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { httpsCallable } from 'firebase/functions'
-import { IDS, adminDb, seedSynthetic, studentClient, teacherClient } from './helpers'
+import { IDS, Timestamp, adminDb, adminUpload, seedSynthetic, studentClient, teacherClient } from './helpers'
 
 beforeEach(async () => {
   await seedSynthetic()
@@ -131,6 +131,7 @@ describe('Endurecimiento · reserva de archivos y docentes desactivados', () => 
     expect(r.data.path).toContain(r.data.reservationId)
     expect((await adminDb.doc(`uploadReservations/${r.data.reservationId}`).get()).data()?.state).toBe('reserved')
 
+    await adminUpload(r.data.path, Buffer.alloc(1024), 'application/pdf')
     const submit = httpsCallable<{ deliveryId: string; submitKey: string; format: string; description: string; reservationId: string }, { evidenceId: string }>(s.functions, 'submitEvidence')
     await submit({ deliveryId, submitKey: 'rk1', format: 'file', description: 'x', reservationId: r.data.reservationId })
     expect((await adminDb.doc(`uploadReservations/${r.data.reservationId}`).get()).data()?.state).toBe('consumed')
@@ -151,5 +152,50 @@ describe('Endurecimiento · reserva de archivos y docentes desactivados', () => 
     await expect(httpsCallable(t3.functions, 'revokeSession')({ enrollmentId: IDS.s1, reason: 'x' })).rejects.toThrow()
     await expect(httpsCallable(t3.functions, 'regenerateCode')({ enrollmentId: IDS.s1 })).rejects.toThrow()
     await expect(httpsCallable(t3.functions, 'validateMilestone')({ deliveryId: `${IDS.s1}_${IDS.milestone1}`, assessments: [{ indicatorCode: 'D1', level: 'achieved' }] })).rejects.toThrow()
+  })
+})
+
+describe('Endurecimiento · verificación de objeto y reserva', () => {
+  async function prepare() {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
+    const { deliveryId } = (await start({ milestoneId: IDS.milestone1 })).data
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+    const r = (await reserve({ deliveryId, fileName: 'guia.pdf', contentType: 'application/pdf', sizeBytes: 1024 })).data
+    return { s, deliveryId, ...r }
+  }
+
+  it('exige el objeto real y no consume la reserva si falta', async () => {
+    const { s, deliveryId, reservationId } = await prepare()
+    const submit = httpsCallable(s.functions, 'submitEvidence')
+    await expect(submit({ deliveryId, submitKey: 'v1', format: 'file', description: 'x', reservationId })).rejects.toThrow()
+    expect((await adminDb.doc(`uploadReservations/${reservationId}`).get()).data()?.state).toBe('reserved')
+  })
+
+  it('consume tras verificar el objeto y es idempotente sin re-consumir', async () => {
+    const { s, deliveryId, reservationId, path } = await prepare()
+    await adminUpload(path, Buffer.alloc(1024), 'application/pdf')
+    const submit = httpsCallable<{ deliveryId: string; submitKey: string; format: string; description: string; reservationId: string }, { evidenceId: string; reused: boolean }>(s.functions, 'submitEvidence')
+    const a = await submit({ deliveryId, submitKey: 'v2', format: 'file', description: 'x', reservationId })
+    expect((await adminDb.doc(`uploadReservations/${reservationId}`).get()).data()?.state).toBe('consumed')
+    const b = await submit({ deliveryId, submitKey: 'v2', format: 'file', description: 'x', reservationId })
+    expect(b.data.evidenceId).toBe(a.data.evidenceId)
+    expect(b.data.reused).toBe(true)
+  })
+
+  it('rechaza si el objeto no coincide con la reserva (tamaño)', async () => {
+    const { s, deliveryId, reservationId, path } = await prepare()
+    await adminUpload(path, Buffer.alloc(2048), 'application/pdf')
+    const submit = httpsCallable(s.functions, 'submitEvidence')
+    await expect(submit({ deliveryId, submitKey: 'v3', format: 'file', description: 'x', reservationId })).rejects.toThrow()
+  })
+
+  it('rechaza si la reserva caducó entre la subida y el envío', async () => {
+    const { s, deliveryId, reservationId, path } = await prepare()
+    await adminUpload(path, Buffer.alloc(1024), 'application/pdf')
+    await adminDb.doc(`uploadReservations/${reservationId}`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) })
+    const submit = httpsCallable(s.functions, 'submitEvidence')
+    await expect(submit({ deliveryId, submitKey: 'v4', format: 'file', description: 'x', reservationId })).rejects.toThrow()
   })
 })

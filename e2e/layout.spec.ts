@@ -33,15 +33,8 @@ test.describe('Ancho de 320 px (reflow sin scroll horizontal)', () => {
       await page.screenshot({ path: `${SHOTS}/${p.shot}`, fullPage: true })
     }
 
-    // Vista docente
-    await page.goto('/#/acceso')
-    await page.getByRole('button', { name: 'Docente Uno' }).click()
-    await expect(page.getByRole('heading', { name: 'Panel del curso' })).toBeVisible()
-    const overflowDocente = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    )
-    expect(overflowDocente).toBeLessThanOrEqual(1)
-    await page.screenshot({ path: `${SHOTS}/04-panel-docente.png`, fullPage: true })
+    // El panel docente no se expone en la interfaz (proveedor institucional pendiente):
+    // se simula en las pruebas de Functions con token de docente.
   })
 })
 

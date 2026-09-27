@@ -27,6 +27,7 @@ const RES = {
   consumed: 'res-consumed',
   wrongFile: 'res-wrong-file',
   wrongSize: 'res-wrong-size',
+  closed: 'res-closed',
 }
 
 async function seedReservations() {
@@ -49,6 +50,7 @@ async function seedReservations() {
   await adminDb.doc(`uploadReservations/${RES.consumed}`).set({ ...base, state: 'consumed', expiresAt: future })
   await adminDb.doc(`uploadReservations/${RES.wrongFile}`).set({ ...base, state: 'reserved', expiresAt: future })
   await adminDb.doc(`uploadReservations/${RES.wrongSize}`).set({ ...base, state: 'reserved', expiresAt: future, sizeBytes: 999 })
+  await adminDb.doc(`uploadReservations/${RES.closed}`).set({ ...base, state: 'reserved', expiresAt: future })
 }
 
 beforeAll(async () => {
@@ -194,6 +196,19 @@ describe('Storage Rules · reserva real de archivos', () => {
   it('deniega curso ajeno o matrícula ajena', async () => {
     await assertFails(up(U.s1, path(IDS.courseY, IDS.s1, D, RES.valid, 'guia.txt'), 3, 'text/plain'))
     await assertFails(up(U.s3, path(IDS.courseX, IDS.s1, D, RES.valid, 'guia.txt'), 3, 'text/plain'))
+  })
+
+  it('deniega la carga con la entrega cerrada o el vínculo revocado', async () => {
+    const p = path(IDS.courseX, IDS.s1, D, RES.closed, 'guia.txt')
+    await adminDb.doc(`deliveries/${D}`).update({ state: 'achieved' })
+    await assertFails(up(U.s1, p, 3, 'text/plain'))
+    await adminDb.doc(`deliveries/${D}`).update({ state: 'in_progress' })
+
+    await adminDb.doc(`sessionBindings/${U.s1}`).update({ state: 'revoked' })
+    await assertFails(up(U.s1, p, 3, 'text/plain'))
+    await adminDb.doc(`sessionBindings/${U.s1}`).update({ state: 'active' })
+
+    await assertSucceeds(up(U.s1, p, 3, 'text/plain'))
   })
 
   it('el docente del curso lee el archivo; el de otro curso no', async () => {

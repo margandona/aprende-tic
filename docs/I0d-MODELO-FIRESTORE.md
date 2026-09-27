@@ -3,6 +3,10 @@
 > **Decisión vigente:** RED-TIC usa **exclusivamente Firebase** (Authentication, Cloud Firestore, Cloud Storage,
 > Cloud Functions, Hosting). El SQL de Supabase queda como **antecedente histórico** en `docs/archivo-supabase/`
 > (no ejecutar). Este documento describe el modelo vigente.
+>
+> **I1a:** el frontend Vue ya consume este modelo contra **Emulator Suite** (Auth anónimo, `redeemCode` y lecturas
+> por rol). El vínculo se guarda en `sessionStorage` para sobrevivir recargas de la pestaña; las lecturas siguen
+> autorizadas por el binding del servidor. La subida de archivos permanece **deshabilitada en la interfaz**.
 
 ---
 

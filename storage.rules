@@ -50,6 +50,10 @@ service firebase.storage {
       allow create: if activeBinding()
         && binding().enrollmentId == enrollmentId
         && binding().courseId == courseId
+        && delivery(deliveryId) != null
+        && delivery(deliveryId).courseId == courseId
+        && delivery(deliveryId).ownerEnrollmentId == enrollmentId
+        && delivery(deliveryId).state in ['not_started', 'in_progress']
         && firestore.exists(/databases/(default)/documents/uploadReservations/$(reservationId))
         && reservation(reservationId) != null
         && reservation(reservationId).state == 'reserved'

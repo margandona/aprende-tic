@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from './components/AppShell.vue'
-import { session } from './stores/session'
+import { ensureAuth, session } from './stores/session'
 
 const route = useRoute()
 const showShell = computed(() => Boolean(session.role) && route.name !== 'acceso')
+
+onMounted(() => {
+  void ensureAuth()
+})
 </script>
 
 <template>

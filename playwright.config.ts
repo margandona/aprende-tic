@@ -3,7 +3,9 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: 1,
+  globalSetup: './e2e/global-setup.ts',
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:4173',

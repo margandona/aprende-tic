@@ -2,18 +2,18 @@
 import { computed } from 'vue'
 import { useAsync } from '../composables/useAsync'
 import { getCourse, getPendingReviews, getTeacher } from '../data/repository'
-import { demo, session } from '../stores/session'
+import { demo } from '../stores/session'
 import { missionStateLabels } from '../utils/labels'
 import StatePanel from '../components/StatePanel.vue'
 
 const { data, loading, error } = useAsync(async () => {
   const [teacher, course, pending] = await Promise.all([
-    getTeacher(session.teacherId ?? ''),
+    getTeacher('doc-01'),
     getCourse(),
     getPendingReviews(),
   ])
   return { teacher, course, pending }
-}, () => [session.teacherId, demo.state])
+}, () => [demo.state])
 
 const teacher = computed(() => data.value?.teacher ?? null)
 const course = computed(() => data.value?.course ?? null)

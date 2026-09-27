@@ -29,30 +29,8 @@ jobs:
       - name: Build
         run: npm run build
 
-  e2e:
-    name: Playwright + axe (320 px, teclado, movimiento reducido)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Instalar Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Pruebas de navegador
-        run: npm run e2e
-      - name: Guardar reporte axe
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: axe-report
-          path: docs/accesibilidad/axe-report.json
-          if-no-files-found: ignore
-
   emuladores:
-    name: Firebase Emulator Suite (reglas, functions, Storage, concurrencia)
+    name: Firebase Emulator Suite (reglas, functions, Storage, concurrencia y navegador)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,5 +45,14 @@ jobs:
       - run: npm ci
       - name: Dependencias de Functions
         run: npm --prefix functions ci
-      - name: Pruebas con emuladores (Auth, Firestore, Storage, Functions)
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Pruebas con emuladores (Vitest + Playwright)
         run: npm run emu:test
+      - name: Guardar reporte axe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: axe-report
+          path: docs/accesibilidad/axe-report.json
+          if-no-files-found: ignore

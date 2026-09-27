@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { session, signOut } from '../stores/session'
+import { logout, session } from '../stores/session'
 import BottomNav from './BottomNav.vue'
 import SkipLink from './SkipLink.vue'
 import DemoStateBar from './DemoStateBar.vue'
@@ -10,8 +10,8 @@ const router = useRouter()
 const role = computed(() => session.role ?? 'student')
 const roleLabel = computed(() => (role.value === 'student' ? 'Estudiante' : 'Docente'))
 
-function salir(): void {
-  signOut()
+async function salir(): Promise<void> {
+  await logout()
   router.push('/acceso')
 }
 </script>

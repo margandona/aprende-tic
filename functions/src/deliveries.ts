@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { getStorage } from 'firebase-admin/storage'
 import {
   ALLOWED_MIME,
   CONSTANTS,
@@ -144,7 +145,23 @@ export const submitEvidence = onCall(async (request) => {
       ) {
         throw new HttpsError('failed-precondition', 'Reserva de archivo inválida.')
       }
+      if ((r.expiresAt as Timestamp).toMillis() <= Date.now()) {
+        throw new HttpsError('failed-precondition', 'La reserva de archivo caducó.')
+      }
       storagePath = r.storagePath as string
+
+      // Verifica el objeto real (existencia, MIME y tamaño) antes de consumir la reserva.
+      let meta: { contentType?: string; size?: string | number } | undefined
+      const bucketName = `${process.env.GCLOUD_PROJECT ?? 'demo-red-tic'}.appspot.com`
+      try {
+        const [m] = await getStorage().bucket(bucketName).file(storagePath).getMetadata()
+        meta = m
+      } catch {
+        throw new HttpsError('failed-precondition', 'El archivo reservado no existe en Storage.')
+      }
+      if (meta.contentType !== r.contentType || Number(meta.size) !== Number(r.sizeBytes)) {
+        throw new HttpsError('failed-precondition', 'El archivo no coincide con la reserva (tipo o tamaño).')
+      }
     }
 
     const version = ((d.evidenceCount as number) ?? 0) + 1

@@ -32,7 +32,8 @@ export const CONSTANTS = {
   maxAttempts: 10,
   lockMinutes: 15,
   rateWindowMinutes: 10,
-  rateMax: 10,
+  rateMax: 10, // por auth.uid (señal confiable)
+  rateMaxActor: 60, // por borde (IP); generoso para NAT/aula, no es la defensa principal
   reservationMinutes: 30,
   maxUploadBytes: 5 * 1024 * 1024,
 }

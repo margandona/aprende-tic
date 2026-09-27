@@ -43,18 +43,20 @@ npm run dev
 | `npm run emu:test` | Firebase Emulator Suite: reglas, Functions, Storage y concurrencia |
 | `npm run emu:start` | Emuladores en modo interactivo |
 
-## Backend (Firebase, I0d)
+## Backend (Firebase, I0d / I1a)
 
 - **Decisión vigente:** Firebase (Auth, Firestore, Storage, Functions, Hosting). El SQL de Supabase queda como **histórico** en `docs/archivo-supabase/` (**no ejecutar**).
 - Reglas: `firestore.rules`, `storage.rules`; índices: `firestore.indexes.json`.
-- Functions en `functions/`; pruebas con emuladores en `tests-emu/`.
-- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informe: `docs/I0d-RESULTADOS.md`.
+- Functions en `functions/`; pruebas con emuladores en `tests-emu/` (Vitest) y `e2e/` (Playwright).
+- **I1a:** el frontend Vue consume Firebase contra **Emulator Suite** (Auth anónimo, canje `redeemCode` y lecturas por rol). La subida de archivos permanece **deshabilitada en la interfaz**.
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`.
 
 ```bash
-npm run emu:test        # 22 pruebas con Auth, Firestore, Storage y Functions
+npm run emu:test        # 40 pruebas de emulador + 10 de navegador
+npm run emu:start       # emuladores en modo interactivo
 ```
 
-> I0d usa solo el proyecto `demo-red-tic` y datos sintéticos. **No** conecta el frontend a registros reales todavía (eso es I1a) y **no** habilita producción.
+> Solo proyecto `demo-red-tic` y datos sintéticos. **No** se despliega ni se usan datos reales.
 
 ## Códigos de demostración (fixtures)
 
@@ -100,13 +102,16 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 
 - **I0a:** interfaz local con fixtures, sin backend ni credenciales.
 - **I0b / I0c:** esquema SQL y pruebas PostgreSQL → **archivados** en `docs/archivo-supabase/` (sustituidos por Firebase).
-- **I0d:** backend Firebase (Auth, Firestore, Storage, Functions) probado con Emulator Suite. La app **aún no está conectada** a registros reales.
-- **Fuera de alcance todavía (I1a):** conexión del frontend a Auth/lecturas Firebase, proveedor institucional docente, App Check, despliegue y datos de personas reales.
+- **I0d / I0e:** backend Firebase (Auth, Firestore, Storage, Functions) con reglas endurecidas, probado con Emulator Suite.
+- **I1a:** frontend Vue conectado a Firebase **solo en emuladores** (Auth anónimo, canje, lecturas por rol). Subida de archivos deshabilitada en la UI.
+- **Fuera de alcance todavía:** App Check exigido, proveedor institucional docente, subida de archivos en la UI, flujo de diagnóstico en cliente, retención/consentimiento, despliegue y datos reales.
 
 ## Informes
 
 - `docs/I0a-RESULTADOS.md` — interfaz, pruebas y ajustes cerrados.
 - `docs/I0b-RESULTADOS.md` / `docs/I0c-RESULTADOS.md` — histórico Supabase (archivado).
 - `docs/I0d-RESULTADOS.md` — backend Firebase, matriz permitido/denegado y pendientes.
+- `docs/I0e-RESULTADOS.md` — endurecimiento (reservas, rate limit, permisos, encuesta).
+- `docs/I1a-RESULTADOS.md` — frontend conectado a Firebase y correcciones de I0e.
 - `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.
 

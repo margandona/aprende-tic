@@ -1,32 +1,50 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { demoStudentCodes, demoTeacherCodes } from '../fixtures/synthetic'
-import { signInStudent, signInTeacher } from '../stores/session'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../firebase/client'
+import { ensureAuth, setBinding } from '../stores/session'
 
 const router = useRouter()
 const code = ref('')
 const error = ref<string | null>(null)
+const busy = ref(false)
 
-function entrar(): void {
+const MESSAGES: Record<string, string> = {
+  invalid: 'El código no es válido.',
+  revoked: 'El código fue revocado. Pídele uno nuevo a tu docente.',
+  expired: 'El código caducó. Pídele uno nuevo a tu docente.',
+  locked: 'Demasiados intentos. Intenta más tarde.',
+  rate_limited: 'Demasiados intentos. Espera unos minutos.',
+  no_session: 'No se pudo iniciar sesión. Recarga la página.',
+}
+
+async function entrar(): Promise<void> {
   const value = code.value.trim().toUpperCase()
   error.value = null
-
   if (!value) {
     error.value = 'Escribe un código para continuar.'
     return
   }
-  if (demoStudentCodes[value]) {
-    signInStudent(demoStudentCodes[value])
-    router.push('/estudiante/recorrido')
-    return
+  busy.value = true
+  try {
+    await ensureAuth()
+    const redeem = httpsCallable<
+      { code: string },
+      { status: string; enrollmentId?: string; courseId?: string; pseudonym?: string }
+    >(functions, 'redeemCode')
+    const res = await redeem({ code: value })
+    if (res.data.status === 'ok' && res.data.enrollmentId && res.data.courseId && res.data.pseudonym) {
+      setBinding({ enrollmentId: res.data.enrollmentId, courseId: res.data.courseId, pseudonym: res.data.pseudonym })
+      router.push('/estudiante/recorrido')
+      return
+    }
+    error.value = MESSAGES[res.data.status] ?? 'No se pudo canjear el código.'
+  } catch {
+    error.value = 'No se pudo conectar con el servidor. ¿Están activos los emuladores?'
+  } finally {
+    busy.value = false
   }
-  if (demoTeacherCodes[value]) {
-    signInTeacher(demoTeacherCodes[value])
-    router.push('/docente/panel')
-    return
-  }
-  error.value = 'El código no es válido en esta demostración. Usa uno de los códigos de ejemplo.'
 }
 
 function usarCodigo(valor: string): void {
@@ -39,8 +57,8 @@ function usarCodigo(valor: string): void {
   <section class="access" aria-labelledby="access-title">
     <h1 id="access-title">Entrar a RED-TIC</h1>
     <p>
-      Esta es una <strong>demostración local con datos ficticios</strong>. No se piden datos personales y no hay
-      conexión a ningún servidor.
+      Demostración con <strong>Firebase Emulator Suite</strong> y datos ficticios. Se inicia una sesión anónima y el
+      código individual se canjea en el servidor; no se piden datos personales.
     </p>
 
     <form class="card" @submit.prevent="entrar">
@@ -55,28 +73,24 @@ function usarCodigo(valor: string): void {
         :aria-describedby="error ? 'codigo-error' : 'codigo-ayuda'"
         :aria-invalid="Boolean(error)"
       />
-      <p id="codigo-ayuda" class="hint">Ejemplo: ZORRO-01 (estudiante) o DOCENTE-01 (docente).</p>
+      <p id="codigo-ayuda" class="hint">Ejemplo: ZORRO-01 o PUMA-02.</p>
       <p v-if="error" id="codigo-error" class="error" role="alert">{{ error }}</p>
-      <button type="submit" class="btn btn--primary">Entrar</button>
+      <button type="submit" class="btn btn--primary" :disabled="busy">
+        {{ busy ? 'Canjeando…' : 'Entrar' }}
+      </button>
     </form>
 
     <div class="card">
       <h2>Códigos de ejemplo (ficticios)</h2>
-      <p class="hint">Al elegir uno, la app entra con esos fixtures.</p>
+      <p class="hint">Al elegir uno, la app canjea el código contra los emuladores.</p>
       <div class="code-group">
-        <button type="button" class="btn btn--secondary" @click="usarCodigo('ZORRO-01')">
-          Estudiante Zorro-01
-        </button>
-        <button type="button" class="btn btn--secondary" @click="usarCodigo('PUMA-02')">
-          Estudiante Puma-02
-        </button>
-        <button type="button" class="btn btn--secondary" @click="usarCodigo('DOCENTE-01')">
-          Docente Uno
-        </button>
-        <button type="button" class="btn btn--secondary" @click="usarCodigo('DOCENTE-02')">
-          Docente Dos
-        </button>
+        <button type="button" class="btn btn--secondary" @click="usarCodigo('ZORRO-01')">Estudiante Zorro-01</button>
+        <button type="button" class="btn btn--secondary" @click="usarCodigo('PUMA-02')">Estudiante Puma-02</button>
       </div>
+      <p class="hint">
+        El acceso docente se <strong>simula en los emuladores</strong> (pruebas de Functions con token de docente). El
+        <strong>proveedor institucional</strong> queda pendiente y no se expone aquí.
+      </p>
     </div>
   </section>
 </template>

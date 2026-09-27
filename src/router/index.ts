@@ -48,9 +48,8 @@ export const router = createRouter({
 router.beforeEach((to) => {
   const requiredRole = to.meta.role as 'student' | 'teacher' | undefined
   if (!requiredRole) return true
-  if (session.role !== requiredRole) {
-    return { path: '/acceso' }
-  }
+  if (requiredRole === 'student' && !session.binding) return { path: '/acceso' }
+  if (requiredRole === 'teacher' && session.role !== 'teacher') return { path: '/acceso' }
   return true
 })
 

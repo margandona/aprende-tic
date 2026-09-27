@@ -2,7 +2,15 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { routes } from '../src/router'
 import BottomNav from '../src/components/BottomNav.vue'
-import { session, signInStudent, signInTeacher, signOut } from '../src/stores/session'
+import { session } from '../src/stores/session'
+
+const binding = { enrollmentId: 'est-01', courseId: 'curso-1m-a', pseudonym: 'Zorro-01' }
+
+function resetSession() {
+  session.role = null
+  session.binding = null
+  session.uid = null
+}
 
 describe('Configuración de rutas', () => {
   it('incluye las pantallas base de estudiante y docente', () => {
@@ -24,23 +32,25 @@ describe('Configuración de rutas', () => {
 })
 
 describe('Guarda de navegación por rol', () => {
-  beforeEach(() => signOut())
+  beforeEach(() => resetSession())
 
-  it('redirige a /acceso si no hay sesión', async () => {
+  it('redirige a /acceso si no hay vínculo', async () => {
     const { router } = await import('../src/router')
     await router.push('/estudiante/recorrido')
     expect(router.currentRoute.value.path).toBe('/acceso')
   })
 
-  it('permite el recorrido del estudiante cuando hay sesión de estudiante', async () => {
-    signInStudent('est-01')
+  it('permite el recorrido con vínculo activo', async () => {
+    session.binding = binding
+    session.role = 'student'
     const { router } = await import('../src/router')
     await router.push('/estudiante/recorrido')
     expect(router.currentRoute.value.path).toBe('/estudiante/recorrido')
   })
 
   it('impide que un estudiante abra el panel docente', async () => {
-    signInStudent('est-01')
+    session.binding = binding
+    session.role = 'student'
     const { router } = await import('../src/router')
     await router.push('/docente/panel')
     expect(router.currentRoute.value.path).toBe('/acceso')
@@ -50,10 +60,7 @@ describe('Guarda de navegación por rol', () => {
 describe('Navegación inferior por rol', () => {
   const stubs = { RouterLink: { template: '<a><slot /></a>' } }
 
-  beforeEach(() => signOut())
-
   it('muestra los destinos del estudiante', () => {
-    signInStudent('est-01')
     const wrapper = mount(BottomNav, { props: { role: 'student' }, global: { stubs } })
     const text = wrapper.text()
     expect(text).toContain('Mi recorrido')
@@ -63,7 +70,6 @@ describe('Navegación inferior por rol', () => {
   })
 
   it('muestra los destinos del docente', () => {
-    signInTeacher('doc-01')
     const wrapper = mount(BottomNav, { props: { role: 'teacher' }, global: { stubs } })
     const text = wrapper.text()
     expect(text).toContain('Panel')
@@ -74,6 +80,5 @@ describe('Navegación inferior por rol', () => {
   it('expone una navegación con nombre accesible', () => {
     const wrapper = mount(BottomNav, { props: { role: 'student' }, global: { stubs } })
     expect(wrapper.find('nav').attributes('aria-label')).toBe('Navegación principal')
-    expect(session.role).toBeNull()
   })
 })

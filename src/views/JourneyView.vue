@@ -1,26 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAsync } from '../composables/useAsync'
-import { getCourse, getMissions, getStudent } from '../data/repository'
-import { badges } from '../fixtures/synthetic'
+import { fetchJourney } from '../data/firebaseRepository'
 import { demo, session } from '../stores/session'
 import BadgeGrid from '../components/BadgeGrid.vue'
 import MissionCard from '../components/MissionCard.vue'
 import ProgressBar from '../components/ProgressBar.vue'
 import StatePanel from '../components/StatePanel.vue'
 
-const { data, loading, error } = useAsync(async () => {
-  const [student, course, missions] = await Promise.all([
-    getStudent(session.studentId ?? ''),
-    getCourse(),
-    getMissions(),
-  ])
-  return { student, course, missions }
-}, () => [session.studentId, demo.state])
+const { data, loading, error } = useAsync(() => fetchJourney(), () => [session.binding?.enrollmentId, demo.state])
 
 const student = computed(() => data.value?.student ?? null)
 const course = computed(() => data.value?.course ?? null)
 const missions = computed(() => data.value?.missions ?? [])
+const badges = computed(() => data.value?.badges ?? [])
 const achievedCount = computed(
   () => student.value?.missions.filter((m) => m.state === 'achieved').length ?? 0,
 )

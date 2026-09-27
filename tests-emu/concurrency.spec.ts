@@ -42,14 +42,28 @@ describe('Concurrencia · reintentos simultáneos', () => {
     expect(xp.size).toBe(1)
   })
 
-  it('canjes concurrentes con códigos distintos y mismo actor agotan el límite por actor', async () => {
+  it('varias cuentas anónimas no se bloquean entre sí (cupo por auth.uid)', async () => {
     const clients = await Promise.all(Array.from({ length: 12 }, () => studentClient()))
     const results = await Promise.allSettled(
       clients.map((c, i) => httpsCallable<{ code: string }, { status: string }>(c.functions, 'redeemCode')({ code: `NO-${i}` })),
     )
     const statuses = results.map((r) => (r.status === 'fulfilled' ? r.value.data.status : 'rejected'))
-    const limited = statuses.filter((s) => s === 'rate_limited').length
-    expect(limited).toBeGreaterThan(0)
+    // Cada cuenta tiene su propio cupo; un intento por cuenta no agota el límite.
+    expect(statuses.includes('rate_limited')).toBe(false)
+  })
+
+  it('el límite por auth.uid no se evade con códigos distintos', async () => {
+    const s = await studentClient()
+    const statuses: string[] = []
+    for (let i = 0; i < 12; i++) {
+      try {
+        const r = await httpsCallable<{ code: string }, { status: string }>(s.functions, 'redeemCode')({ code: `X-${i}` })
+        statuses.push(r.data.status)
+      } catch {
+        statuses.push('rejected')
+      }
+    }
+    expect(statuses.filter((x) => x === 'rate_limited').length).toBeGreaterThan(0)
   })
 
   it('startDelivery concurrente no reinicia la entrega', async () => {
