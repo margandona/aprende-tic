@@ -110,3 +110,4 @@ export async function audit(actorUid: string, role: string, action: string, enti
 }
 
 export { Timestamp, FieldValue }
+export type { Transaction } from 'firebase-admin/firestore'

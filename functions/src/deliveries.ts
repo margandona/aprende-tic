@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import {
   Timestamp,
+  type Transaction,
   assertSignedIn,
   assertTeacherOfCourse,
   audit,
@@ -50,7 +51,7 @@ export const submitEvidence = onCall(async (request) => {
   const description = String(request.data?.description ?? '')
   if (!deliveryId || !submitKey) throw new HttpsError('invalid-argument', 'deliveryId y submitKey son obligatorios.')
 
-  return db.runTransaction(async (tx) => {
+  return db.runTransaction(async (tx: Transaction) => {
     const deliveryRef = db.doc(`deliveries/${deliveryId}`)
     const evidenceRef = db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`)
     const deliverySnap = await tx.get(deliveryRef)
@@ -108,7 +109,7 @@ export const registerEquivalentEvidence = onCall(async (request) => {
   }
 
   const deliveryId = deliveryIdFor(enrollmentId, milestoneId)
-  const result = await db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx: Transaction) => {
     const deliveryRef = db.doc(`deliveries/${deliveryId}`)
     const evidenceRef = db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`)
     const deliverySnap = await tx.get(deliveryRef)

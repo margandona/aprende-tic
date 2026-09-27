@@ -3,6 +3,7 @@ import {
   CONSTANTS,
   Timestamp,
   FieldValue,
+  type Transaction,
   actorKeyFrom,
   assertSignedIn,
   assertTeacherOfCourse,
@@ -38,7 +39,7 @@ export const redeemCode = onCall(async (request) => {
     throw new HttpsError('resource-exhausted', 'Demasiados intentos de canje.')
   }
 
-  const result = await db.runTransaction(async (tx): Promise<RedeemFail | RedeemOk> => {
+  const result = await db.runTransaction(async (tx: Transaction): Promise<RedeemFail | RedeemOk> => {
     const credSnap = await tx.get(credRef)
     const fail = (status: RedeemFail['status']): RedeemFail => {
       tx.set(db.collection('redeemAttempts').doc(), {
@@ -134,7 +135,7 @@ export const regenerateCode = onCall(async (request) => {
   const plain = generateCode()
   const newHash = hashCode(plain)
 
-  await db.runTransaction(async (tx) => {
+  await db.runTransaction(async (tx: Transaction) => {
     const enrollmentRef = db.doc(`enrollments/${enrollmentId}`)
     const enrollmentSnap = await tx.get(enrollmentRef)
     const enrollment = enrollmentSnap.data()!
@@ -178,7 +179,7 @@ export const revokeSession = onCall(async (request) => {
   const courseId = await courseOfEnrollment(enrollmentId)
   await assertTeacherOfCourse(uid, courseId)
 
-  await db.runTransaction(async (tx) => {
+  await db.runTransaction(async (tx: Transaction) => {
     const enrollmentRef = db.doc(`enrollments/${enrollmentId}`)
     const enrollmentSnap = await tx.get(enrollmentRef)
     const activeUid = enrollmentSnap.data()?.activeBindingUid as string | undefined

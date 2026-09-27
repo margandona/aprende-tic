@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import type { DocumentReference } from 'firebase-admin/firestore'
 import {
   Timestamp,
+  type Transaction,
   assertSignedIn,
   assertTeacherOfCourse,
   audit,
@@ -35,7 +36,7 @@ export const validateMilestone = onCall(async (request) => {
   const courseId = head.data()!.courseId as string
   await assertTeacherOfCourse(uid, courseId)
 
-  const result = await db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx: Transaction) => {
     const deliveryRef = db.doc(`deliveries/${deliveryId}`)
     const dSnap = await tx.get(deliveryRef)
     const d = dSnap.data()!
@@ -176,7 +177,7 @@ export const correctAssessment = onCall(async (request) => {
   const a = snap.data()!
   await assertTeacherOfCourse(uid, a.courseId as string)
 
-  await db.runTransaction(async (tx) => {
+  await db.runTransaction(async (tx: Transaction) => {
     const s = await tx.get(ref)
     const cur = s.data()!
     tx.set(db.collection('assessmentHistory').doc(), {
