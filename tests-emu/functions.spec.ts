@@ -201,15 +201,52 @@ describe('Endurecimiento · verificación de objeto y reserva', () => {
 })
 
 describe('Diagnóstico · encuesta, respuestas, envío y revisión', () => {
-  const survey = { A1: 'teléfono propio', A2: 'en el colegio', A3: 'leer pasos', A4: 'ninguna', A5: 'sí', A6: 'trámite' }
+  const survey = {
+    A1: ['teléfono propio'],
+    A2: 'en el colegio',
+    A3: 'leer pasos',
+    A4: { option: 'ninguna', other: '' },
+    A5: { created: 'sí', verified: 'alguna vez', explained: 'no' },
+    A6: 'trámite',
+  }
 
-  it('guarda encuesta y respuestas, y el envío es inmutable', async () => {
+  async function prepareAttempt(code = IDS.codeS4) {
     const s = await studentClient()
-    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    await httpsCallable(s.functions, 'redeemCode')({ code })
     await httpsCallable(s.functions, 'saveConditionsSurvey')({ answers: survey })
     const { attemptId } = (
       await httpsCallable<{ kind: string }, { attemptId: string }>(s.functions, 'startDiagnosisAttempt')({ kind: 'pre' })
     ).data
+    return { s, attemptId }
+  }
+
+  it('acepta encuesta múltiple/opcional y rechaza combinaciones inválidas', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS4 })
+    const save = httpsCallable(s.functions, 'saveConditionsSurvey')
+
+    // A1 múltiple + A6 vacío + A4 «otra» con detalle.
+    await save({
+      answers: {
+        A1: ['teléfono propio', 'computador compartido'],
+        A2: 'prefiero no responder',
+        A3: '',
+        A4: { option: 'otra', other: 'espacio con menos ruido' },
+        A5: { created: 'no', verified: 'no recuerdo', explained: 'alguna vez' },
+        A6: '',
+      },
+    })
+    const stored = await adminDb.doc(`conditionsSurveys/${IDS.s4}`).get()
+    expect(stored.data()?.schemaVersion).toBe(2)
+    expect(stored.data()?.answers.A1).toEqual(['teléfono propio', 'computador compartido'])
+
+    await expect(save({ answers: { ...survey, A1: ['prefiero no responder', 'ninguno'] } })).rejects.toThrow()
+    await expect(save({ answers: { ...survey, A4: { option: 'otra', other: '' } } })).rejects.toThrow()
+    await expect(save({ answers: { ...survey, A1: 'teléfono propio' } })).rejects.toThrow()
+  })
+
+  it('guarda encuesta y respuestas de forma atómica; el envío es inmutable', async () => {
+    const { s, attemptId } = await prepareAttempt()
     const saveResp = httpsCallable(s.functions, 'saveDiagnosisResponse')
     await saveResp({ attemptId, taskCode: 'T1', responseStatus: 'answered', responseText: 'respuesta', technicalIssue: false, supports: ['audio_reading'] })
     await saveResp({ attemptId, taskCode: 'T2', responseStatus: 'not_answered', responseText: '', technicalIssue: true, supports: [] })
@@ -217,6 +254,7 @@ describe('Diagnóstico · encuesta, respuestas, envío y revisión', () => {
 
     // Inmutable tras el envío.
     await expect(saveResp({ attemptId, taskCode: 'T3', responseStatus: 'answered', responseText: 'x', technicalIssue: false, supports: [] })).rejects.toThrow()
+    await expect(httpsCallable(s.functions, 'saveConditionsSurvey')({ answers: survey })).rejects.toThrow()
 
     const t1 = await adminDb.doc(`diagnosisAttempts/${attemptId}/responses/T1`).get()
     expect(t1.data()?.supports).toEqual(['audio_reading'])
@@ -224,17 +262,28 @@ describe('Diagnóstico · encuesta, respuestas, envío y revisión', () => {
     expect(t2.data()?.responseStatus).toBe('not_answered')
     expect(t2.data()?.technicalIssue).toBe(true)
     expect(t2.data()?.score ?? null).toBeNull()
-    const enroll = await adminDb.doc(`enrollments/${IDS.s2}`).get()
+    const enroll = await adminDb.doc(`enrollments/${IDS.s4}`).get()
     expect(enroll.data()?.surveySubmitted).toBe(true)
   })
 
-  it('el docente revisa solo tras el envío; otro docente no puede', async () => {
+  it('permite corregir la encuesta antes del envío y exige encuesta para enviar', async () => {
     const s = await studentClient()
-    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
-    await httpsCallable(s.functions, 'saveConditionsSurvey')({ answers: survey })
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS4 })
     const { attemptId } = (
       await httpsCallable<{ kind: string }, { attemptId: string }>(s.functions, 'startDiagnosisAttempt')({ kind: 'pre' })
     ).data
+    // Sin encuesta, el envío se rechaza.
+    await expect(httpsCallable(s.functions, 'submitDiagnosisAttempt')({ attemptId })).rejects.toThrow()
+
+    const save = httpsCallable(s.functions, 'saveConditionsSurvey')
+    await save({ answers: survey })
+    await save({ answers: { ...survey, A6: 'corregida antes del envío' } })
+    const stored = await adminDb.doc(`conditionsSurveys/${IDS.s4}`).get()
+    expect(stored.data()?.answers.A6).toBe('corregida antes del envío')
+  })
+
+  it('el docente revisa solo tras el envío; otro docente o uno inactivo no puede', async () => {
+    const { s, attemptId } = await prepareAttempt()
     await httpsCallable(s.functions, 'saveDiagnosisResponse')({ attemptId, taskCode: 'T1', responseStatus: 'answered', responseText: 'r', technicalIssue: false, supports: [] })
 
     const t1 = await teacherClient(IDS.t1)
@@ -247,5 +296,56 @@ describe('Diagnóstico · encuesta, respuestas, envío y revisión', () => {
 
     const t2 = await teacherClient(IDS.t2)
     await expect(httpsCallable(t2.functions, 'reviewDiagnosisResponse')({ attemptId, taskCode: 'T1', score: 1 })).rejects.toThrow()
+    const t3 = await teacherClient(IDS.t3)
+    await expect(httpsCallable(t3.functions, 'reviewDiagnosisResponse')({ attemptId, taskCode: 'T1', score: 1 })).rejects.toThrow()
+  })
+
+  it('exige una respuesta existente y conserva puntaje nulo con barrera/no respuesta', async () => {
+    const { s, attemptId } = await prepareAttempt()
+    await httpsCallable(s.functions, 'saveDiagnosisResponse')({ attemptId, taskCode: 'T1', responseStatus: 'answered', responseText: 'r', technicalIssue: false, supports: [] })
+    await httpsCallable(s.functions, 'saveDiagnosisResponse')({ attemptId, taskCode: 'T2', responseStatus: 'not_answered', responseText: '', technicalIssue: true, supports: [] })
+    await httpsCallable(s.functions, 'submitDiagnosisAttempt')({ attemptId })
+
+    const t1 = await teacherClient(IDS.t1)
+    const review = httpsCallable(t1.functions, 'reviewDiagnosisResponse')
+
+    // T5 no tiene respuesta: no se puede valorar.
+    await expect(review({ attemptId, taskCode: 'T5', score: 1 })).rejects.toThrow()
+    // T2 tiene barrera técnica: solo puntaje nulo.
+    await expect(review({ attemptId, taskCode: 'T2', score: 1 })).rejects.toThrow()
+    await review({ attemptId, taskCode: 'T2', score: null, reviewerComment: 'Barrera técnica.' })
+    expect((await adminDb.doc(`diagnosisAttempts/${attemptId}/responses/T2`).get()).data()?.score ?? null).toBeNull()
+  })
+
+  it('registra el historial al corregir la valoración y la devolución', async () => {
+    const { s, attemptId } = await prepareAttempt()
+    await httpsCallable(s.functions, 'saveDiagnosisResponse')({ attemptId, taskCode: 'T1', responseStatus: 'answered', responseText: 'r', technicalIssue: false, supports: [] })
+    await httpsCallable(s.functions, 'submitDiagnosisAttempt')({ attemptId })
+
+    const t1 = await teacherClient(IDS.t1)
+    const review = httpsCallable(t1.functions, 'reviewDiagnosisResponse')
+    await review({ attemptId, taskCode: 'T1', score: 2, reviewerComment: 'Muy bien.' })
+    await review({ attemptId, taskCode: 'T1', score: 1, reviewerComment: 'Puede profundizar.' })
+    await httpsCallable(t1.functions, 'saveDiagnosisFeedback')({ attemptId, strength: 'Contrasta autoría.', nextStep: 'Verificar la fecha.' })
+
+    const history = await adminDb.collection('diagnosisReviewHistory').where('attemptId', '==', attemptId).get()
+    const kinds = history.docs.map((d) => d.data().kind)
+    expect(kinds).toContain('score')
+    expect(kinds).toContain('feedback')
+    const scoreEntry = history.docs.find((d) => d.data().kind === 'score' && d.data().newScore === 1)
+    expect(scoreEntry?.data().previousScore).toBe(2)
+    expect(scoreEntry?.data().newScore).toBe(1)
+    const attempt = await adminDb.doc(`diagnosisAttempts/${attemptId}`).get()
+    expect(attempt.data()?.strength).toBe('Contrasta autoría.')
+    expect(attempt.data()?.nextStep).toBe('Verificar la fecha.')
+  })
+
+  it('el acceso docente de demostración solo resuelve docentes activos', async () => {
+    const s = await studentClient()
+    const signIn = httpsCallable<{ code: string }, { token: string; teacherUid: string }>(s.functions, 'teacherDemoSignIn')
+    const ok = await signIn({ code: 'DOCENTE-01' })
+    expect(ok.data.teacherUid).toBe(IDS.t1)
+    expect(typeof ok.data.token).toBe('string')
+    await expect(signIn({ code: 'NO-EXISTE' })).rejects.toThrow()
   })
 })

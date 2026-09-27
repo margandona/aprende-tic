@@ -9,16 +9,23 @@ import {
   submitDiagnosis,
   type DiagnosisResponse,
 } from '../data/firebaseRepository'
+import { DIAGNOSIS_TASKS, diagnosisCaseFor } from '../data/diagnosisCase'
+import {
+  A1_OPTIONS,
+  A2_OPTIONS,
+  A3_OPTIONS,
+  A4_OPTIONS,
+  A5_EXPERIENCES,
+  A5_OPTIONS,
+  emptySurvey,
+  type A5Key,
+  type SurveyAnswers,
+} from '../data/diagnosisSurvey'
 import { demo, session } from '../stores/session'
 import StatePanel from '../components/StatePanel.vue'
 
-const TASKS = [
-  { code: 'T1', label: 'T1 · Buscar y contrastar', hint: 'Escribe una búsqueda útil y compara las fuentes A y B; indica qué usarías y por qué.' },
-  { code: 'T2', label: 'T2 · Decidir con seguridad', hint: 'Ante el mensaje sospechoso: ¿qué harías antes de abrir el enlace y qué dato no entregarías?' },
-  { code: 'T3', label: 'T3 · Explicar para otra persona', hint: 'Redacta tres pasos para reservar usando solo la información confiable.' },
-  { code: 'T4', label: 'T4 · Resolver una dificultad', hint: 'La persona no encuentra el botón: propón dos acciones y cómo comprobarías el resultado.' },
-  { code: 'T5', label: 'T5 · Formular necesidad', hint: 'Escribe una pregunta que harías al usuario antes de diseñar la guía.' },
-]
+const CASE = diagnosisCaseFor('pre')
+const TASKS = DIAGNOSIS_TASKS
 
 const SUPPORTS = [
   { code: 'text_amplified', label: 'Texto ampliado' },
@@ -30,7 +37,7 @@ const SUPPORTS = [
 
 const { data, loading, error, reload } = useAsync(() => fetchDiagnosis(), () => [session.binding?.enrollmentId, demo.state])
 
-const survey = reactive<Record<string, string>>({ A1: '', A2: '', A3: '', A4: '', A5: '', A6: '' })
+const survey = reactive<SurveyAnswers>(emptySurvey())
 const responses = reactive<Record<string, DiagnosisResponse>>({})
 const busy = ref(false)
 const message = ref('')
@@ -43,6 +50,7 @@ watch(
   () => data.value,
   (value) => {
     if (!value) return
+    if (value.survey) Object.assign(survey, value.survey)
     for (const t of TASKS) {
       const found = value.responses.find((r) => r.taskCode === t.code)
       responses[t.code] = found ?? {
@@ -61,16 +69,21 @@ watch(
 
 const submitted = computed(() => data.value?.status === 'submitted')
 const surveySubmitted = computed(() => Boolean(data.value?.surveySubmitted))
-const surveyComplete = computed(() => Object.values(survey).every((v) => v.trim().length > 0))
+const surveyLocked = computed(() => surveySubmitted.value && submitted.value)
 
-async function enviarEncuesta(): Promise<void> {
-  if (!surveyComplete.value) {
-    notify('Responde A1–A6 antes de continuar.')
+function toggleA1(option: string): void {
+  const has = survey.A1.includes(option)
+  if (option === 'prefiero no responder') {
+    survey.A1 = has ? [] : [option]
     return
   }
+  survey.A1 = has ? survey.A1.filter((o) => o !== option) : [...survey.A1.filter((o) => o !== 'prefiero no responder'), option]
+}
+
+async function enviarEncuesta(): Promise<void> {
   busy.value = true
   try {
-    await saveSurvey({ ...survey })
+    await saveSurvey({ ...survey, A1: [...survey.A1], A4: { ...survey.A4 }, A5: { ...survey.A5 } })
     notify('Encuesta guardada.')
     await reload()
   } catch {
@@ -131,6 +144,10 @@ async function enviar(): Promise<void> {
   busy.value = false
   await reload()
 }
+
+function a5(key: A5Key, value: string): void {
+  survey.A5[key] = value
+}
 </script>
 
 <template>
@@ -148,43 +165,120 @@ async function enviar(): Promise<void> {
     <StatePanel v-else-if="!session.binding" state="empty" message="Entra con tu código para ver el diagnóstico." />
 
     <template v-else>
+      <!-- Caso y materiales (Fase 5) -->
+      <section class="card case" aria-labelledby="case-title" data-testid="diagnosis-case">
+        <h2 id="case-title">Caso: {{ CASE.title }}</h2>
+        <p>{{ CASE.summary }}</p>
+        <p class="sim" role="note">🔎 {{ CASE.disclaimer }}</p>
+
+        <div class="sources">
+          <article v-for="s in CASE.sources" :key="s.label" class="source" :data-source="s.label">
+            <h3>{{ s.label }} · {{ s.heading }}</h3>
+            <p class="provenance">{{ s.provenance }}</p>
+            <ul>
+              <li v-for="(line, i) in s.lines" :key="i">{{ line }}</li>
+            </ul>
+            <p v-if="s.simulatedLink" class="sim-link">
+              Enlace simulado (no activo): <span class="code">{{ s.simulatedLink }}</span>
+            </p>
+          </article>
+        </div>
+
+        <article class="message" data-testid="suspicious-message">
+          <h3>Mensaje recibido (simulado)</h3>
+          <p class="provenance">De: {{ CASE.message.from }}</p>
+          <p class="provenance">Asunto: {{ CASE.message.subject }}</p>
+          <p>{{ CASE.message.body }}</p>
+          <p class="sim-link">
+            Enlace simulado (no activo): <span class="code">{{ CASE.message.simulatedLink }}</span>
+          </p>
+        </article>
+
+        <div class="materials">
+          <div>
+            <h3>Plantilla de carpeta de fuentes</h3>
+            <ul>
+              <li v-for="(f, i) in CASE.folderTemplate" :key="i">{{ f }}</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Instrucciones</h3>
+            <ul>
+              <li v-for="(f, i) in CASE.instructions" :key="i">{{ f }}</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <!-- Encuesta A1–A6 -->
       <section class="card" aria-labelledby="survey-title">
         <h2 id="survey-title">Encuesta de condiciones (A1–A6)</h2>
-        <p v-if="surveySubmitted" class="ok">Encuesta ya registrada.</p>
-        <template v-else>
-          <div class="grid">
-            <label>A1 · ¿Con qué puedes trabajar fuera del colegio?
-              <select v-model="survey.A1" class="input"><option value="">Selecciona…</option><option>teléfono propio</option><option>teléfono compartido</option><option>computador propio</option><option>computador compartido</option><option>ninguno</option><option>prefiero no responder</option></select>
-            </label>
-            <label>A2 · ¿Dónde tienes conexión para una tarea?
-              <select v-model="survey.A2" class="input"><option value="">Selecciona…</option><option>en el colegio</option><option>en casa de forma estable</option><option>solo datos móviles</option><option>ninguna</option><option>prefiero no responder</option></select>
-            </label>
-            <label>A3 · ¿Qué te resulta más cómodo para aprender una tarea nueva?
-              <select v-model="survey.A3" class="input"><option value="">Selecciona…</option><option>leer pasos</option><option>ver demostración</option><option>escuchar explicación</option><option>probar con ayuda</option><option>combinación</option></select>
-            </label>
-            <label>A4 · ¿Necesitas alguna condición para participar mejor?
-              <select v-model="survey.A4" class="input"><option value="">Selecciona…</option><option>texto ampliado</option><option>subtítulos</option><option>audio o lectura</option><option>teclado</option><option>más tiempo</option><option>ninguna</option><option>prefiero hablarlo en privado</option></select>
-            </label>
-            <label>A5 · ¿Has creado documentos, comprobado una noticia o explicado un trámite digital?
-              <select v-model="survey.A5" class="input"><option value="">Selecciona…</option><option>sí</option><option>alguna vez</option><option>no</option><option>no recuerdo</option></select>
-            </label>
-            <label>A6 · ¿Qué tarea digital te gustaría poder hacer mejor o ayudar a alguien a realizar?
-              <input v-model="survey.A6" class="input" type="text" maxlength="500" />
-            </label>
+        <p class="hint">Tus respuestas no son una nota. Puedes dejar en blanco lo que no desees responder.</p>
+        <p v-if="surveyLocked" class="ok">Encuesta registrada (cerrada tras el envío).</p>
+
+        <fieldset :disabled="surveyLocked">
+          <legend>A1 · ¿Con qué puedes trabajar fuera del colegio? (puedes marcar varias)</legend>
+          <label v-for="opt in A1_OPTIONS" :key="opt" class="check">
+            <input type="checkbox" :checked="survey.A1.includes(opt)" @change="toggleA1(opt)" />
+            {{ opt }}
+          </label>
+        </fieldset>
+
+        <div class="grid">
+          <label>A2 · ¿Dónde tienes conexión para una tarea?
+            <select v-model="survey.A2" class="input">
+              <option value="">Sin responder</option>
+              <option v-for="opt in A2_OPTIONS" :key="opt">{{ opt }}</option>
+            </select>
+          </label>
+          <label>A3 · ¿Qué te resulta más cómodo para aprender una tarea nueva?
+            <select v-model="survey.A3" class="input">
+              <option value="">Sin responder</option>
+              <option v-for="opt in A3_OPTIONS" :key="opt">{{ opt }}</option>
+            </select>
+          </label>
+          <label>A4 · ¿Necesitas alguna condición para participar mejor?
+            <select v-model="survey.A4.option" class="input">
+              <option value="">Sin responder</option>
+              <option v-for="opt in A4_OPTIONS" :key="opt">{{ opt }}</option>
+            </select>
+          </label>
+          <label v-if="survey.A4.option === 'otra'">A4 · Describe la condición «otra»
+            <input v-model="survey.A4.other" class="input" type="text" maxlength="200" />
+          </label>
+        </div>
+
+        <fieldset :disabled="surveyLocked">
+          <legend>A5 · ¿Has hecho alguna de estas acciones? (registra cada una por separado)</legend>
+          <div v-for="exp in A5_EXPERIENCES" :key="exp.key" class="a5-row">
+            <label :for="`A5-${exp.key}`">{{ exp.label }}</label>
+            <select
+              :id="`A5-${exp.key}`"
+              class="input"
+              :value="survey.A5[exp.key]"
+              @change="a5(exp.key, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">Sin responder</option>
+              <option v-for="opt in A5_OPTIONS" :key="opt">{{ opt }}</option>
+            </select>
           </div>
-          <button type="button" class="btn btn--primary" :disabled="busy || !surveyComplete" @click="enviarEncuesta">
-            Guardar encuesta
-          </button>
-        </template>
+        </fieldset>
+
+        <label>A6 · ¿Qué tarea digital te gustaría poder hacer mejor o ayudar a alguien a realizar? (opcional)
+          <input v-model="survey.A6" class="input" type="text" maxlength="500" :disabled="surveyLocked" />
+        </label>
+
+        <button v-if="!surveyLocked" type="button" class="btn btn--primary" :disabled="busy" @click="enviarEncuesta">
+          {{ surveySubmitted ? 'Actualizar encuesta' : 'Guardar encuesta' }}
+        </button>
       </section>
 
       <!-- Tareas T1–T5 -->
       <section v-if="surveySubmitted" class="tasks" aria-labelledby="tasks-title">
         <h2 id="tasks-title">Tareas T1–T5</h2>
         <article v-for="t in TASKS" :key="t.code" class="card task" :data-task="t.code">
-          <h3>{{ t.label }}</h3>
-          <p class="hint">{{ t.hint }}</p>
+          <h3>{{ t.code }} · {{ t.title }} <span class="chip">{{ t.indicator }}</span></h3>
+          <p class="consigna">{{ t.prompt }}</p>
 
           <label :for="`resp-${t.code}`">Respuesta</label>
           <textarea :id="`resp-${t.code}`" v-model="responses[t.code].responseText" class="input" rows="3" :disabled="submitted" />
@@ -214,7 +308,8 @@ async function enviar(): Promise<void> {
           </fieldset>
 
           <p v-if="submitted" class="feedback">
-            <strong>Puntaje docente:</strong> {{ responses[t.code].score ?? 'sin puntuar' }}
+            <strong>Puntaje docente:</strong>
+            {{ responses[t.code].score ?? (responses[t.code].responseStatus !== 'answered' || responses[t.code].technicalIssue ? 'nulo (no respondida o barrera técnica)' : 'sin puntuar') }}
             <span v-if="responses[t.code].reviewerComment"> · {{ responses[t.code].reviewerComment }}</span>
           </p>
         </article>
@@ -228,6 +323,12 @@ async function enviar(): Promise<void> {
           </button>
           <p v-if="submitted" class="ok">Diagnóstico enviado (inmutable).</p>
         </div>
+
+        <section v-if="submitted && (data?.strength || data?.nextStep)" class="card" aria-labelledby="feedback-title">
+          <h2 id="feedback-title">Devolución docente</h2>
+          <p v-if="data?.strength"><strong>Fortaleza observada:</strong> {{ data?.strength }}</p>
+          <p v-if="data?.nextStep"><strong>Siguiente paso:</strong> {{ data?.nextStep }}</p>
+        </section>
       </section>
 
       <StatePanel v-else state="empty" message="Responde la encuesta para habilitar las tareas." />
@@ -242,12 +343,15 @@ async function enviar(): Promise<void> {
   gap: var(--rt-space-4);
 }
 .lede,
-.hint {
+.hint,
+.provenance,
+.consigna {
   color: var(--rt-text-muted);
 }
 .grid {
   display: grid;
   gap: var(--rt-space-3);
+  margin-top: var(--rt-space-3);
 }
 label {
   display: block;
@@ -273,6 +377,54 @@ fieldset {
 fieldset label,
 .check {
   font-weight: 400;
+}
+.sources {
+  display: grid;
+  gap: var(--rt-space-3);
+  margin-top: var(--rt-space-3);
+}
+.source,
+.message {
+  border: 1px solid var(--rt-border);
+  border-left: 4px solid var(--rt-primary);
+  border-radius: var(--rt-radius-sm);
+  padding: var(--rt-space-3);
+  background: var(--rt-surface);
+}
+.message {
+  border-left-color: var(--rt-danger);
+  margin-top: var(--rt-space-3);
+}
+.source ul,
+.materials ul {
+  margin: var(--rt-space-2) 0 0;
+  padding-left: var(--rt-space-4);
+}
+.sim {
+  background: var(--rt-warning-soft);
+  color: #7c2d12;
+  padding: var(--rt-space-2);
+  border-radius: var(--rt-radius-sm);
+  font-weight: 600;
+}
+.sim-link {
+  font-weight: 600;
+}
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--rt-bg);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+.materials {
+  display: grid;
+  gap: var(--rt-space-3);
+  margin-top: var(--rt-space-3);
+}
+.a5-row {
+  display: grid;
+  gap: var(--rt-space-1);
+  margin-bottom: var(--rt-space-2);
 }
 .task {
   margin-bottom: var(--rt-space-3);

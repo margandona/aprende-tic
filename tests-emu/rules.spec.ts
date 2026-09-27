@@ -158,9 +158,10 @@ describe('Firestore Rules · aislamiento por curso y rol', () => {
     expect(t2).toBe(true)
   })
 
-  it('la encuesta de condiciones solo la escribe el servidor y la lee el docente del curso', async () => {
-    await assertFails(setDoc(doc(fs(U.s1), 'conditionsSurveys', IDS.s1), { enrollmentId: IDS.s1, courseId: IDS.courseX, schemaVersion: 1, answers: {} }))
-    await assertFails(getDoc(doc(fs(U.s1), 'conditionsSurveys', IDS.s1)))
+  it('la encuesta de condiciones la escribe el servidor y la leen el propio estudiante y el docente del curso', async () => {
+    await assertFails(setDoc(doc(fs(U.s1), 'conditionsSurveys', IDS.s1), { enrollmentId: IDS.s1, courseId: IDS.courseX, schemaVersion: 2, answers: {} }))
+    await assertSucceeds(getDoc(doc(fs(U.s1), 'conditionsSurveys', IDS.s1)))
+    await assertFails(getDoc(doc(fs(U.s2), 'conditionsSurveys', IDS.s1)))
     await assertSucceeds(getDoc(doc(fs(IDS.t1), 'conditionsSurveys', IDS.s1)))
     await assertFails(getDoc(doc(fs(IDS.t2), 'conditionsSurveys', IDS.s1)))
   })
@@ -174,6 +175,26 @@ describe('Firestore Rules · aislamiento por curso y rol', () => {
     await assertFails(getDoc(doc(fs(IDS.t2), 'diagnosisAttempts', attemptId)))
     await assertFails(setDoc(doc(fs(U.s1), 'diagnosisAttempts', attemptId), { status: 'draft' }))
     await assertFails(setDoc(doc(fs(U.s1), 'diagnosisAttempts', attemptId, 'responses', 'T9'), { responseText: 'x' }))
+  })
+
+  it('aísla el diagnóstico entre cursos (curso Y no visible para docente/estudiante del curso X)', async () => {
+    await assertFails(getDoc(doc(fs(IDS.t1), 'diagnosisAttempts', `${IDS.s3}_pre`)))
+    await assertFails(getDoc(doc(fs(U.s1), 'diagnosisAttempts', `${IDS.s3}_pre`)))
+    await assertSucceeds(getDoc(doc(fs(IDS.t2), 'diagnosisAttempts', `${IDS.s3}_pre`)))
+  })
+
+  it('el historial de revisión y los códigos docentes no se escriben desde el cliente', async () => {
+    await adminDb.doc('diagnosisReviewHistory/h1').set({
+      attemptId: `${IDS.s1}_pre`, enrollmentId: IDS.s1, courseId: IDS.courseX, kind: 'score', taskCode: 'T1',
+      previousScore: 2, newScore: 1, changedBy: IDS.t1, changedAt: Timestamp.now(),
+    })
+    await assertSucceeds(getDoc(doc(fs(IDS.t1), 'diagnosisReviewHistory', 'h1')))
+    await assertFails(getDoc(doc(fs(IDS.t2), 'diagnosisReviewHistory', 'h1')))
+    await assertFails(getDoc(doc(fs(U.s1), 'diagnosisReviewHistory', 'h1')))
+    await assertFails(setDoc(doc(fs(IDS.t1), 'diagnosisReviewHistory', 'h2'), { courseId: IDS.courseX }))
+
+    await assertFails(getDoc(doc(fs(IDS.t1), 'teacherDemoCodes', 'DOCENTE-01')))
+    await assertFails(setDoc(doc(fs(IDS.t1), 'teacherDemoCodes', 'DOCENTE-01'), { teacherUid: IDS.t1 }))
   })
 })
 

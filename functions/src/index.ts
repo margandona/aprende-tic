@@ -3,7 +3,7 @@
  * Identidad, entregas, validación con XP idempotente y diagnóstico.
  * Las Admin SDK omiten las reglas del cliente: cada función valida el actor internamente.
  */
-export { redeemCode, regenerateCode, revokeSession } from './identity'
+export { redeemCode, regenerateCode, revokeSession, teacherDemoSignIn } from './identity'
 export { startDelivery, submitEvidence, registerEquivalentEvidence, reserveUpload } from './deliveries'
 export { validateMilestone, correctAssessment, revokeXp, reopenMilestone } from './validation'
 export {
@@ -12,4 +12,5 @@ export {
   saveDiagnosisResponse,
   submitDiagnosisAttempt,
   reviewDiagnosisResponse,
+  saveDiagnosisFeedback,
 } from './diagnosis'

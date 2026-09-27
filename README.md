@@ -50,10 +50,11 @@ npm run dev
 - Functions en `functions/`; pruebas con emuladores en `tests-emu/` (Vitest) y `e2e/` (Playwright).
 - **I1a:** el frontend Vue consume Firebase contra **Emulator Suite** (Auth anónimo, canje `redeemCode` y lecturas por rol). La subida de archivos permanece **deshabilitada en la interfaz**.
 - **I1b:** sesión/entorno con **fallo cerrado** y **flujo de diagnóstico** (encuesta A1–A6 + tareas T1–T5, borrador y envío inmutable) en la interfaz.
-- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`.
+- **I1c:** instrumento completo (caso de la biblioteca, fichas A/B, mensaje simulado), encuesta múltiple/opcional, transiciones cerradas y **vista docente mínima** con revisión, puntaje nulo e historial.
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`.
 
 ```bash
-npm run emu:test        # 43 pruebas de emulador + 14 de navegador
+npm run emu:test        # 50 pruebas de emulador + 19 de navegador
 npm run emu:start       # emuladores en modo interactivo
 ```
 
@@ -63,12 +64,12 @@ npm run emu:start       # emuladores en modo interactivo
 
 | Código | Rol | Datos |
 |---|---|---|
-| `ZORRO-01` | Estudiante | Recorrido avanzado; varios indicadores evaluados |
-| `PUMA-02` | Estudiante | Recorrido inicial; útil para estados parciales |
-| `DOCENTE-01` | Docente | Panel del curso |
-| `DOCENTE-02` | Docente | Panel del curso |
+| `ZORRO-01` | Estudiante | Recorrido avanzado; diagnóstico enviado |
+| `PUMA-02` | Estudiante | Diagnóstico enviado con una tarea no respondida |
+| `DOCENTE-01` | Docente (demostración) | Curso de Zorro-01/Puma-02 |
+| `DOCENTE-02` | Docente (demostración) | Otro curso (aislamiento) |
 
-También se puede escribir el código en el campo de acceso.
+También se puede escribir el código en el campo de acceso. El **acceso docente** es una **simulación en emuladores** (token personalizado); el proveedor institucional queda pendiente.
 
 ## Datos sintéticos incluidos
 
@@ -106,7 +107,8 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - **I0d / I0e:** backend Firebase (Auth, Firestore, Storage, Functions) con reglas endurecidas, probado con Emulator Suite.
 - **I1a:** frontend Vue conectado a Firebase **solo en emuladores** (Auth anónimo, canje, lecturas por rol). Subida de archivos deshabilitada en la UI.
 - **I1b:** sesión/entorno con fallo cerrado y flujo de diagnóstico (encuesta A1–A6 + T1–T5) en la interfaz, solo en emuladores.
-- **Fuera de alcance todavía:** App Check exigido, proveedor institucional docente, subida de archivos en la UI, panel docente del diagnóstico, retención/consentimiento, despliegue y datos reales.
+- **I1c:** instrumento completo con estímulos (caso, fichas A/B, mensaje simulado), encuesta múltiple/opcional, corrección antes del envío, envío inmutable y **vista docente mínima** (revisión, puntaje nulo e historial).
+- **Fuera de alcance todavía:** App Check exigido, proveedor institucional docente, subida de archivos en la UI, retención/consentimiento, despliegue y datos reales.
 
 ## Informes
 
@@ -116,5 +118,6 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - `docs/I0e-RESULTADOS.md` — endurecimiento (reservas, rate limit, permisos, encuesta).
 - `docs/I1a-RESULTADOS.md` — frontend conectado a Firebase y correcciones de I0e.
 - `docs/I1b-RESULTADOS.md` — sesión/entorno con fallo cerrado y flujo de diagnóstico.
+- `docs/I1c-RESULTADOS.md` — instrumento completo, transiciones cerradas y vista docente mínima.
 - `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.
 

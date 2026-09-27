@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { onAuthStateChanged, signInAnonymously, signOut as fbSignOut } from 'firebase/auth'
+import { onAuthStateChanged, signInAnonymously, signInWithCustomToken, signOut as fbSignOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase/client'
 
@@ -9,10 +9,14 @@ export interface Binding {
   pseudonym: string
 }
 
-/** Solo se persiste { uid, binding } mínimo; nunca códigos ni credenciales. */
+export type SessionRole = 'student' | 'teacher'
+
+/** Solo se persiste lo mínimo; nunca códigos ni credenciales. */
 interface PersistedSession {
   uid: string
-  binding: Binding
+  role: SessionRole
+  binding?: Binding
+  displayName?: string
 }
 
 const STORAGE_KEY = 'redtic_session'
@@ -43,14 +47,16 @@ function clearPersisted(): void {
 export const session = reactive<{
   ready: boolean
   uid: string | null
-  role: 'student' | 'teacher' | null
+  role: SessionRole | null
   binding: Binding | null
+  displayName: string | null
   invalidated: boolean
 }>({
   ready: false,
   uid: null,
   role: null,
   binding: null,
+  displayName: null,
   invalidated: false,
 })
 
@@ -74,9 +80,10 @@ function waitForAuthInit(): Promise<void> {
   return firstAuthInit
 }
 
-function clearBindingLocal(): void {
+function clearSessionLocal(): void {
   session.binding = null
   session.role = null
+  session.displayName = null
   clearPersisted()
 }
 
@@ -84,7 +91,7 @@ onAuthStateChanged(auth, (user) => {
   const uid = user?.uid ?? null
   // Solo se limpia ante una rotación real (había un UID y cambió), no en la restauración inicial.
   if (session.uid && uid !== session.uid) {
-    clearBindingLocal()
+    clearSessionLocal()
     revalidatedForUid = null
   }
   session.uid = uid
@@ -114,18 +121,36 @@ export async function ensureAuth(): Promise<void> {
   session.ready = true
 }
 
-/** Revalida el vínculo guardado contra `sessionBindings/{uid}` en el servidor. */
+/**
+ * Revalida la sesión guardada:
+ *  - docente: restaura el rol si el UID coincide.
+ *  - estudiante: comprueba el vínculo contra `sessionBindings/{uid}` en el servidor.
+ */
 export async function revalidateBinding(): Promise<void> {
   const uid = session.uid
   if (!uid) {
-    clearBindingLocal()
+    clearSessionLocal()
     return
   }
   if (revalidatedForUid === uid) return
 
   const persisted = readPersisted()
-  if (!persisted || persisted.uid !== uid || !persisted.binding) {
-    clearBindingLocal()
+  if (!persisted || persisted.uid !== uid) {
+    clearSessionLocal()
+    revalidatedForUid = uid
+    return
+  }
+
+  if (persisted.role === 'teacher') {
+    session.binding = null
+    session.role = 'teacher'
+    session.displayName = persisted.displayName ?? 'Docente'
+    revalidatedForUid = uid
+    return
+  }
+
+  if (!persisted.binding) {
+    clearSessionLocal()
     revalidatedForUid = uid
     return
   }
@@ -145,15 +170,15 @@ export async function revalidateBinding(): Promise<void> {
       session.binding = persisted.binding
       session.role = 'student'
     } else {
-      clearBindingLocal()
+      clearSessionLocal()
     }
   } catch {
-    clearBindingLocal()
+    clearSessionLocal()
   }
   revalidatedForUid = uid
 }
 
-/** Asegura Auth y revalida el vínculo una vez por UID. */
+/** Asegura Auth y revalida la sesión una vez por UID. */
 export async function ensureSession(): Promise<void> {
   await ensureAuth()
   await revalidateBinding()
@@ -162,23 +187,36 @@ export async function ensureSession(): Promise<void> {
 export function setBinding(binding: Binding): void {
   session.binding = binding
   session.role = 'student'
+  session.displayName = binding.pseudonym
   session.invalidated = false
-  if (session.uid) writePersisted({ uid: session.uid, binding })
+  if (session.uid) writePersisted({ uid: session.uid, role: 'student', binding })
+}
+
+/** Inicia sesión docente de demostración (solo emuladores) con un token personalizado. */
+export async function signInAsTeacher(token: string, teacherUid: string, displayName: string): Promise<void> {
+  await signInWithCustomToken(auth, token)
+  session.uid = teacherUid
+  session.binding = null
+  session.role = 'teacher'
+  session.displayName = displayName
+  session.invalidated = false
+  revalidatedForUid = teacherUid
+  writePersisted({ uid: teacherUid, role: 'teacher', displayName })
 }
 
 export function clearBinding(): void {
-  clearBindingLocal()
+  clearSessionLocal()
 }
 
 /** Marca la sesión como inválida (revocación/expiración detectada en una lectura). */
 export function invalidateSession(): void {
-  clearBindingLocal()
+  clearSessionLocal()
   session.invalidated = true
   revalidatedForUid = null
 }
 
 export async function logout(): Promise<void> {
-  clearBindingLocal()
+  clearSessionLocal()
   session.invalidated = false
   revalidatedForUid = null
   try {

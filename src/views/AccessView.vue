@@ -3,11 +3,13 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../firebase/client'
-import { ensureAuth, setBinding } from '../stores/session'
+import { ensureAuth, setBinding, signInAsTeacher } from '../stores/session'
 
 const router = useRouter()
 const code = ref('')
+const teacherCode = ref('')
 const error = ref<string | null>(null)
+const teacherError = ref<string | null>(null)
 const busy = ref(false)
 
 const MESSAGES: Record<string, string> = {
@@ -51,6 +53,30 @@ function usarCodigo(valor: string): void {
   code.value = valor
   entrar()
 }
+
+async function entrarDocente(): Promise<void> {
+  const value = teacherCode.value.trim().toUpperCase()
+  teacherError.value = null
+  if (!value) {
+    teacherError.value = 'Escribe un código docente para continuar.'
+    return
+  }
+  busy.value = true
+  try {
+    await ensureAuth()
+    const signIn = httpsCallable<
+      { code: string },
+      { token: string; teacherUid: string; displayName: string }
+    >(functions, 'teacherDemoSignIn')
+    const res = await signIn({ code: value })
+    await signInAsTeacher(res.data.token, res.data.teacherUid, res.data.displayName)
+    router.push('/docente/diagnosticos')
+  } catch {
+    teacherError.value = 'Código docente inválido (solo disponible en emuladores).'
+  } finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -91,6 +117,26 @@ function usarCodigo(valor: string): void {
         El acceso docente se <strong>simula en los emuladores</strong> (pruebas de Functions con token de docente). El
         <strong>proveedor institucional</strong> queda pendiente y no se expone aquí.
       </p>
+    </div>
+
+    <div class="card">
+      <h2>Acceso docente (demostración)</h2>
+      <p class="hint">Solo en emuladores con docentes sintéticos. Ejemplo: DOCENTE-01 o DOCENTE-02.</p>
+      <form @submit.prevent="entrarDocente">
+        <label for="codigo-docente">Código docente de demostración</label>
+        <input
+          id="codigo-docente"
+          v-model="teacherCode"
+          class="input"
+          type="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          :aria-describedby="teacherError ? 'codigo-docente-error' : undefined"
+          :aria-invalid="Boolean(teacherError)"
+        />
+        <p v-if="teacherError" id="codigo-docente-error" class="error" role="alert">{{ teacherError }}</p>
+        <button type="submit" class="btn btn--secondary" :disabled="busy">Entrar como docente</button>
+      </form>
     </div>
   </section>
 </template>

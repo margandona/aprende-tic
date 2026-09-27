@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { getAuth } from 'firebase-admin/auth'
 import {
   CONSTANTS,
   Timestamp,
@@ -12,6 +13,7 @@ import {
   db,
   generateCode,
   hashCode,
+  isEmulator,
 } from './guards'
 
 /** Resultado del canje. */
@@ -179,6 +181,31 @@ export const regenerateCode = onCall({ enforceAppCheck: APP_CHECK }, async (requ
 
   await audit(uid, 'teacher', 'regenerate_code', 'enrollment', enrollmentId)
   return { status: 'ok', code: plain }
+})
+
+/**
+ * Acceso docente **de demostración**, solo en emuladores.
+ * Resuelve un código sintético a un docente activo y devuelve un token personalizado.
+ * Fuera del emulador falla cerrado: el proveedor institucional queda pendiente.
+ */
+export const teacherDemoSignIn = onCall(async (request) => {
+  if (!isEmulator()) {
+    throw new HttpsError('permission-denied', 'El acceso docente de demostración solo está disponible en emuladores.')
+  }
+  const code = String(request.data?.code ?? '').trim().toUpperCase()
+  if (code.length === 0) throw new HttpsError('invalid-argument', 'Código docente requerido.')
+
+  const snap = await db.collection('teacherDemoCodes').where('code', '==', code).limit(1).get()
+  if (snap.empty) throw new HttpsError('not-found', 'Código docente inválido.')
+  const teacherUid = snap.docs[0].data().teacherUid as string
+
+  const teacher = await db.doc(`teachers/${teacherUid}`).get()
+  if (!teacher.exists || teacher.data()?.status !== 'active') {
+    throw new HttpsError('permission-denied', 'Docente inactivo o inexistente.')
+  }
+
+  const token = await getAuth().createCustomToken(teacherUid)
+  return { token, teacherUid, displayName: (teacher.data()?.displayName as string) ?? 'Docente' }
 })
 
 /** Revoca de inmediato el vínculo activo (docente del curso). */

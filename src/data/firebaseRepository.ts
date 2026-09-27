@@ -6,6 +6,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../firebase/client'
 import { demo, invalidateSession, session } from '../stores/session'
+import type { SurveyAnswers } from './diagnosisSurvey'
 import type {
   Assessment,
   Badge,
@@ -255,7 +256,7 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
   })
 }
 
-// ── Diagnóstico (I1b) ───────────────────────────────────────────────────────
+// ── Diagnóstico (I1b/I1c) ───────────────────────────────────────────────────
 
 export interface DiagnosisResponse {
   taskCode: string
@@ -272,41 +273,68 @@ export interface DiagnosisData {
   status: 'draft' | 'submitted' | null
   responses: DiagnosisResponse[]
   surveySubmitted: boolean
+  survey: SurveyAnswers | null
+  strength: string
+  nextStep: string
+}
+
+function mapResponse(id: string, data: Data): DiagnosisResponse {
+  return {
+    taskCode: id,
+    responseStatus: (data.responseStatus as DiagnosisResponse['responseStatus']) ?? 'not_answered',
+    responseText: (data.responseText as string) ?? '',
+    technicalIssue: Boolean(data.technicalIssue),
+    supports: (data.supports as string[]) ?? [],
+    score: (data.score as number | null) ?? null,
+    reviewerComment: (data.reviewerComment as string) ?? '',
+  }
 }
 
 export async function fetchDiagnosis(): Promise<DiagnosisData> {
   const b = session.binding
-  const empty: DiagnosisData = { attemptId: null, status: null, responses: [], surveySubmitted: false }
+  const empty: DiagnosisData = {
+    attemptId: null,
+    status: null,
+    responses: [],
+    surveySubmitted: false,
+    survey: null,
+    strength: '',
+    nextStep: '',
+  }
   if (!b) return empty
   await gate()
   if (demo.state === 'empty') return empty
 
   return guarded(async () => {
-    // Se usa una consulta (no getDoc por id) para no leer un documento inexistente.
-    const enrollSnap = await getDoc(doc(db, 'enrollments', b.enrollmentId))
-    const attemptsSnap = await getDocs(query(collection(db, 'diagnosisAttempts'), where('enrollmentId', '==', b.enrollmentId)))
+    const [enrollSnap, attemptsSnap, surveySnap] = await Promise.all([
+      getDoc(doc(db, 'enrollments', b.enrollmentId)),
+      getDocs(query(collection(db, 'diagnosisAttempts'), where('enrollmentId', '==', b.enrollmentId))),
+      getDoc(doc(db, 'conditionsSurveys', b.enrollmentId)),
+    ])
     const attemptDoc = attemptsSnap.docs.find((d) => d.data().kind === 'pre') ?? attemptsSnap.docs[0] ?? null
     const attemptId = attemptDoc ? attemptDoc.id : `${b.enrollmentId}_pre`
 
     let status: 'draft' | 'submitted' | null = null
     let responses: DiagnosisResponse[] = []
+    let strength = ''
+    let nextStep = ''
     if (attemptDoc) {
-      status = (attemptDoc.data().status as 'draft' | 'submitted') ?? 'draft'
+      const a = attemptDoc.data()
+      status = (a.status as 'draft' | 'submitted') ?? 'draft'
+      strength = (a.strength as string) ?? ''
+      nextStep = (a.nextStep as string) ?? ''
       const rSnap = await getDocs(collection(db, `diagnosisAttempts/${attemptId}/responses`))
-      responses = rSnap.docs.map((d) => {
-        const data = d.data() as Data
-        return {
-          taskCode: d.id,
-          responseStatus: (data.responseStatus as DiagnosisResponse['responseStatus']) ?? 'not_answered',
-          responseText: (data.responseText as string) ?? '',
-          technicalIssue: Boolean(data.technicalIssue),
-          supports: (data.supports as string[]) ?? [],
-          score: (data.score as number | null) ?? null,
-          reviewerComment: (data.reviewerComment as string) ?? '',
-        }
-      })
+      responses = rSnap.docs.map((d) => mapResponse(d.id, d.data() as Data))
     }
-    return { attemptId, status, responses, surveySubmitted: Boolean(enrollSnap.data()?.surveySubmitted) }
+    return {
+      attemptId,
+      status,
+      responses,
+      surveySubmitted: Boolean(enrollSnap.data()?.surveySubmitted),
+      survey: surveySnap.exists() ? (surveySnap.data()?.answers as SurveyAnswers) : null,
+      strength,
+      nextStep,
+    }
   })
 }
 
@@ -315,7 +343,7 @@ export async function startDiagnosis(kind: 'pre' | 'post' = 'pre'): Promise<stri
   return (await call({ kind })).data.attemptId
 }
 
-export async function saveSurvey(answers: Record<string, string>): Promise<void> {
+export async function saveSurvey(answers: SurveyAnswers): Promise<void> {
   await httpsCallable(functions, 'saveConditionsSurvey')({ answers })
 }
 
@@ -332,4 +360,144 @@ export async function saveDiagnosisResponse(input: {
 
 export async function submitDiagnosis(attemptId: string): Promise<void> {
   await httpsCallable(functions, 'submitDiagnosisAttempt')({ attemptId })
+}
+
+// ── Revisión docente (I1c) ──────────────────────────────────────────────────
+
+export async function reviewDiagnosisResponse(input: {
+  attemptId: string
+  taskCode: string
+  score: number | null
+  reviewerComment: string
+}): Promise<void> {
+  await httpsCallable(functions, 'reviewDiagnosisResponse')(input)
+}
+
+export async function saveDiagnosisFeedback(input: {
+  attemptId: string
+  strength: string
+  nextStep: string
+}): Promise<void> {
+  await httpsCallable(functions, 'saveDiagnosisFeedback')(input)
+}
+
+export interface TeacherDiagnosisSummary {
+  attemptId: string
+  enrollmentId: string
+  pseudonym: string
+  courseId: string
+  submittedAt: string | null
+  responseCount: number
+  scoredCount: number
+}
+
+export interface ReviewHistoryEntry {
+  id: string
+  kind: 'score' | 'feedback'
+  taskCode: string | null
+  previousScore: number | null
+  newScore: number | null
+  previousStrength: string
+  newStrength: string
+  previousNextStep: string
+  newNextStep: string
+  changedAt: string | null
+}
+
+export interface TeacherDiagnosisDetail {
+  attemptId: string
+  enrollmentId: string
+  pseudonym: string
+  courseId: string
+  status: string
+  submittedAt: string | null
+  strength: string
+  nextStep: string
+  survey: SurveyAnswers | null
+  responses: DiagnosisResponse[]
+  history: ReviewHistoryEntry[]
+}
+
+/** Diagnósticos enviados de los cursos del docente autenticado (solo lectura del propio curso). */
+export async function fetchTeacherDiagnoses(): Promise<TeacherDiagnosisSummary[]> {
+  const uid = session.uid
+  if (!uid || session.role !== 'teacher') return []
+  const tcs = await getDocs(query(collection(db, 'teacherCourses'), where('teacherUid', '==', uid)))
+  const courseIds = tcs.docs.map((d) => d.data().courseId as string)
+
+  const out: TeacherDiagnosisSummary[] = []
+  for (const courseId of courseIds) {
+    const attempts = await getDocs(
+      query(collection(db, 'diagnosisAttempts'), where('courseId', '==', courseId), where('status', '==', 'submitted')),
+    )
+    for (const d of attempts.docs) {
+      const data = d.data()
+      const enrollmentId = data.enrollmentId as string
+      const [enroll, responses] = await Promise.all([
+        getDoc(doc(db, 'enrollments', enrollmentId)),
+        getDocs(collection(db, `diagnosisAttempts/${d.id}/responses`)),
+      ])
+      const scored = responses.docs.filter((r) => (r.data().score as number | null) != null).length
+      out.push({
+        attemptId: d.id,
+        enrollmentId,
+        pseudonym: (enroll.data()?.pseudonym as string) ?? 'Sin pseudónimo',
+        courseId,
+        submittedAt: data.submittedAt ? String((data.submittedAt as { toDate?: () => Date }).toDate?.() ?? '') : null,
+        responseCount: responses.size,
+        scoredCount: scored,
+      })
+    }
+  }
+  return out.sort((a, c) => a.pseudonym.localeCompare(c.pseudonym))
+}
+
+/** Detalle de un diagnóstico enviado: respuestas, apoyos, barreras, encuesta e historial. */
+export async function fetchTeacherDiagnosis(attemptId: string): Promise<TeacherDiagnosisDetail> {
+  const aSnap = await getDoc(doc(db, 'diagnosisAttempts', attemptId))
+  if (!aSnap.exists()) throw new Error('Diagnóstico no encontrado.')
+  const a = aSnap.data() as Data
+  const enrollmentId = a.enrollmentId as string
+  const courseId = a.courseId as string
+
+  const [enroll, survey, responses, history] = await Promise.all([
+    getDoc(doc(db, 'enrollments', enrollmentId)),
+    getDoc(doc(db, 'conditionsSurveys', enrollmentId)),
+    getDocs(collection(db, `diagnosisAttempts/${attemptId}/responses`)),
+    getDocs(
+      query(collection(db, 'diagnosisReviewHistory'), where('courseId', '==', courseId), where('attemptId', '==', attemptId)),
+    ),
+  ])
+
+  const historyEntries: ReviewHistoryEntry[] = history.docs
+    .map((d) => {
+      const h = d.data() as Data
+      return {
+        id: d.id,
+        kind: (h.kind as ReviewHistoryEntry['kind']) ?? 'score',
+        taskCode: (h.taskCode as string | null) ?? null,
+        previousScore: (h.previousScore as number | null) ?? null,
+        newScore: (h.newScore as number | null) ?? null,
+        previousStrength: (h.previousStrength as string) ?? '',
+        newStrength: (h.newStrength as string) ?? '',
+        previousNextStep: (h.previousNextStep as string) ?? '',
+        newNextStep: (h.newNextStep as string) ?? '',
+        changedAt: h.changedAt ? String((h.changedAt as { toDate?: () => Date }).toDate?.() ?? '') : null,
+      }
+    })
+    .sort((x, y) => (x.changedAt ?? '').localeCompare(y.changedAt ?? ''))
+
+  return {
+    attemptId,
+    enrollmentId,
+    pseudonym: (enroll.data()?.pseudonym as string) ?? 'Sin pseudónimo',
+    courseId,
+    status: (a.status as string) ?? 'draft',
+    submittedAt: a.submittedAt ? String((a.submittedAt as { toDate?: () => Date }).toDate?.() ?? '') : null,
+    strength: (a.strength as string) ?? '',
+    nextStep: (a.nextStep as string) ?? '',
+    survey: survey.exists() ? (survey.data()?.answers as SurveyAnswers) : null,
+    responses: responses.docs.map((d) => mapResponse(d.id, d.data() as Data)),
+    history: historyEntries,
+  }
 }

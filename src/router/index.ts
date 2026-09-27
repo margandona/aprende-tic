@@ -9,6 +9,7 @@ import DiagnosisView from '../views/DiagnosisView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import TeacherPanelView from '../views/TeacherPanelView.vue'
 import TeacherReviewView from '../views/TeacherReviewView.vue'
+import TeacherDiagnosisView from '../views/TeacherDiagnosisView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 
 export const routes: RouteRecordRaw[] = [
@@ -42,6 +43,12 @@ export const routes: RouteRecordRaw[] = [
   { path: '/estudiante/ajustes', name: 'estudiante-ajustes', component: SettingsView, meta: { role: 'student' } },
   { path: '/docente', redirect: '/docente/panel', meta: { role: 'teacher' } },
   { path: '/docente/panel', name: 'docente-panel', component: TeacherPanelView, meta: { role: 'teacher' } },
+  {
+    path: '/docente/diagnosticos',
+    name: 'docente-diagnosticos',
+    component: TeacherDiagnosisView,
+    meta: { role: 'teacher' },
+  },
   { path: '/docente/revision', name: 'docente-revision', component: TeacherReviewView, meta: { role: 'teacher' } },
   { path: '/docente/ajustes', name: 'docente-ajustes', component: SettingsView, meta: { role: 'teacher' } },
   { path: '/:pathMatch(.*)*', name: 'no-encontrado', component: NotFoundView, meta: { public: true } },

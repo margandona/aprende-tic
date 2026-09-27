@@ -131,11 +131,21 @@ service cloud.firestore {
       }
     }
 
-    // ── Encuesta de condiciones (solo servidor; lectura docente) ─────────
+    // ── Encuesta de condiciones (escritura solo servidor; lectura propia/docente) ─
     match /conditionsSurveys/{enrollmentId} {
+      allow read: if (activeBinding() && enrollmentId == myEnrollmentId())
+        || isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+    }
+
+    // ── Historial de revisión del diagnóstico (solo docente del curso) ───
+    match /diagnosisReviewHistory/{id} {
       allow read: if isTeacherOfCourse(resource.data.courseId);
       allow write: if false;
     }
+
+    // ── Códigos docentes de demostración (solo servidor) ─────────────────
+    match /teacherDemoCodes/{id} { allow read, write: if false; }
 
     match /{document=**} { allow read, write: if false; }
   }

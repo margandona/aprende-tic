@@ -4,7 +4,7 @@ import { IDS, adminDb, hashCode } from '../tests-emu/seed'
 async function redeem(page: import('@playwright/test').Page, code: string) {
   await page.goto('/#/acceso')
   await page.getByLabel('Código individual de demostración').fill(code)
-  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
 }
 
 test.describe('I1a · frontend conectado a Firebase Emulator Suite', () => {

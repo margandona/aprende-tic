@@ -13,6 +13,7 @@ vi.mock('../src/firebase/client', () => ({
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: vi.fn(),
   signInAnonymously: vi.fn(async () => ({ user: { uid: 'test-uid' } })),
+  signInWithCustomToken: vi.fn(async () => ({ user: { uid: 'teacher-uid' } })),
   signOut: vi.fn(async () => {}),
 }))
 
