@@ -12,6 +12,7 @@ interface NavItem {
 
 const studentItems: NavItem[] = [
   { to: '/estudiante/recorrido', label: 'Mi recorrido', icon: '🧭' },
+  { to: '/estudiante/diagnostico', label: 'Diagnóstico', icon: '🩺' },
   { to: '/estudiante/misiones', label: 'Misiones', icon: '🗺️' },
   { to: '/estudiante/aprendizajes', label: 'Mis aprendizajes', icon: '📋' },
   { to: '/estudiante/ajustes', label: 'Ajustes', icon: '⚙️' },
@@ -54,7 +55,8 @@ const items = computed<NavItem[]>(() => (props.role === 'student' ? studentItems
   padding: 0;
 }
 .bottom-nav__list li {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .bottom-nav__link {
   display: flex;
@@ -63,6 +65,7 @@ const items = computed<NavItem[]>(() => (props.role === 'student' ? studentItems
   justify-content: center;
   gap: 2px;
   min-height: var(--rt-touch);
+  min-width: 0;
   padding: var(--rt-space-2) var(--rt-space-1);
   text-decoration: none;
   color: var(--rt-text-muted);
@@ -79,5 +82,7 @@ const items = computed<NavItem[]>(() => (props.role === 'student' ? studentItems
 }
 .bottom-nav__label {
   line-height: 1.1;
+  font-size: 0.7rem;
+  overflow-wrap: anywhere;
 }
 </style>

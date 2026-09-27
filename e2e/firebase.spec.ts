@@ -20,7 +20,7 @@ test.describe('I1a · frontend conectado a Firebase Emulator Suite', () => {
     await expect(page.getByText('Zorro-01').first()).toBeVisible()
 
     // «Mis aprendizajes» muestra solo lo propio del vínculo activo.
-    await page.getByRole('link', { name: 'Mis aprendizajes' }).click()
+    await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Mis aprendizajes' }).click()
     await expect(page.getByRole('heading', { name: 'Mis aprendizajes observados' })).toBeVisible()
     await expect(page.getByText('D1', { exact: true })).toBeVisible()
 
@@ -50,8 +50,10 @@ test.describe('I1a · frontend conectado a Firebase Emulator Suite', () => {
       .get()
     for (const d of bindings.docs) await d.ref.update({ state: 'revoked' })
 
-    // Navegación dentro de la SPA: fuerza una nueva lectura que debe fallar.
-    await page.getByRole('link', { name: 'Misiones' }).click()
-    await expect(page.getByRole('alert')).toContainText('Ocurrió un problema')
+    // Navegación dentro de la SPA: fuerza una nueva lectura que detecta la revocación.
+    await page.evaluate(() => {
+      window.location.hash = '#/estudiante/misiones'
+    })
+    await expect(page.getByRole('heading', { name: 'Entrar a RED-TIC' })).toBeVisible()
   })
 })

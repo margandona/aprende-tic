@@ -1,10 +1,11 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
-import { session } from '../stores/session'
+import { ensureSession, session } from '../stores/session'
 import AccessView from '../views/AccessView.vue'
 import JourneyView from '../views/JourneyView.vue'
 import MissionsView from '../views/MissionsView.vue'
 import MissionDetailView from '../views/MissionDetailView.vue'
 import LearningsView from '../views/LearningsView.vue'
+import DiagnosisView from '../views/DiagnosisView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import TeacherPanelView from '../views/TeacherPanelView.vue'
 import TeacherReviewView from '../views/TeacherReviewView.vue'
@@ -32,6 +33,12 @@ export const routes: RouteRecordRaw[] = [
     component: LearningsView,
     meta: { role: 'student' },
   },
+  {
+    path: '/estudiante/diagnostico',
+    name: 'estudiante-diagnostico',
+    component: DiagnosisView,
+    meta: { role: 'student' },
+  },
   { path: '/estudiante/ajustes', name: 'estudiante-ajustes', component: SettingsView, meta: { role: 'student' } },
   { path: '/docente', redirect: '/docente/panel', meta: { role: 'teacher' } },
   { path: '/docente/panel', name: 'docente-panel', component: TeacherPanelView, meta: { role: 'teacher' } },
@@ -45,9 +52,10 @@ export const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const requiredRole = to.meta.role as 'student' | 'teacher' | undefined
   if (!requiredRole) return true
+  await ensureSession()
   if (requiredRole === 'student' && !session.binding) return { path: '/acceso' }
   if (requiredRole === 'teacher' && session.role !== 'teacher') return { path: '/acceso' }
   return true

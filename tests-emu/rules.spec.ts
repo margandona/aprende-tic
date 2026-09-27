@@ -158,16 +158,22 @@ describe('Firestore Rules · aislamiento por curso y rol', () => {
     expect(t2).toBe(true)
   })
 
-  it('encuesta de condiciones: esquema validado', async () => {
-    const good = { enrollmentId: IDS.s1, courseId: IDS.courseX, schemaVersion: 1, answers: { A1: 'teléfono propio', A2: 'colegio', A3: 'leer pasos', A4: 'ninguna', A5: 'sí', A6: 'trámite' } }
-    await assertSucceeds(setDoc(doc(fs(U.s1), 'conditionsSurveys', IDS.s1), good))
-    await assertFails(setDoc(doc(fs(U.s1), 'conditionsSurveys', 'otra'), { ...good, extra: 'x' }))
-    await assertFails(setDoc(doc(fs(U.s1), 'conditionsSurveys', 'sin-a6'), { ...good, answers: { A1: 'a' } }))
-    await assertFails(setDoc(doc(fs(U.s1), 'conditionsSurveys', 'largo'), { ...good, answers: { ...good.answers, A1: 'x'.repeat(600) } }))
-    await assertFails(setDoc(doc(fs(U.s1), 'conditionsSurveys', 'ajena'), { ...good, enrollmentId: IDS.s3 }))
+  it('la encuesta de condiciones solo la escribe el servidor y la lee el docente del curso', async () => {
+    await assertFails(setDoc(doc(fs(U.s1), 'conditionsSurveys', IDS.s1), { enrollmentId: IDS.s1, courseId: IDS.courseX, schemaVersion: 1, answers: {} }))
     await assertFails(getDoc(doc(fs(U.s1), 'conditionsSurveys', IDS.s1)))
     await assertSucceeds(getDoc(doc(fs(IDS.t1), 'conditionsSurveys', IDS.s1)))
     await assertFails(getDoc(doc(fs(IDS.t2), 'conditionsSurveys', IDS.s1)))
+  })
+
+  it('el diagnóstico lo lee el propio estudiante y el docente del curso; nadie lo escribe desde el cliente', async () => {
+    const attemptId = `${IDS.s1}_pre`
+    await assertSucceeds(getDoc(doc(fs(U.s1), 'diagnosisAttempts', attemptId)))
+    await assertSucceeds(getDoc(doc(fs(U.s1), 'diagnosisAttempts', attemptId, 'responses', 'T1')))
+    await assertSucceeds(getDoc(doc(fs(IDS.t1), 'diagnosisAttempts', attemptId)))
+    await assertSucceeds(getDoc(doc(fs(IDS.t1), 'diagnosisAttempts', attemptId, 'responses', 'T1')))
+    await assertFails(getDoc(doc(fs(IDS.t2), 'diagnosisAttempts', attemptId)))
+    await assertFails(setDoc(doc(fs(U.s1), 'diagnosisAttempts', attemptId), { status: 'draft' }))
+    await assertFails(setDoc(doc(fs(U.s1), 'diagnosisAttempts', attemptId, 'responses', 'T9'), { responseText: 'x' }))
   })
 })
 

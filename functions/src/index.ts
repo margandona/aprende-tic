@@ -6,4 +6,10 @@
 export { redeemCode, regenerateCode, revokeSession } from './identity'
 export { startDelivery, submitEvidence, registerEquivalentEvidence, reserveUpload } from './deliveries'
 export { validateMilestone, correctAssessment, revokeXp, reopenMilestone } from './validation'
-export { submitDiagnosisAttempt } from './diagnosis'
+export {
+  saveConditionsSurvey,
+  startDiagnosisAttempt,
+  saveDiagnosisResponse,
+  submitDiagnosisAttempt,
+  reviewDiagnosisResponse,
+} from './diagnosis'

@@ -1,4 +1,4 @@
-# RED-TIC — MVP · Incremento I0a
+# RED-TIC — MVP · Incremento I1b
 
 Esqueleto local de RED-TIC (Vue 3 + Vite + TypeScript) con **datos 100 % sintéticos**.
 **Sin Supabase, sin credenciales, sin datos reales y sin despliegue público.**
@@ -40,7 +40,7 @@ npm run dev
 | `npm test` | Pruebas unitarias/componentes (Vitest) |
 | `npm run e2e:install` | Descarga el navegador de Playwright (una vez) |
 | `npm run e2e` | Pruebas de 320 px, teclado, movimiento reducido y axe-core |
-| `npm run emu:test` | Firebase Emulator Suite: reglas, Functions, Storage y concurrencia |
+| `npm run emu:test` | Firebase Emulator Suite: reglas, Functions, Storage, concurrencia y diagnóstico |
 | `npm run emu:start` | Emuladores en modo interactivo |
 
 ## Backend (Firebase, I0d / I1a)
@@ -49,10 +49,11 @@ npm run dev
 - Reglas: `firestore.rules`, `storage.rules`; índices: `firestore.indexes.json`.
 - Functions en `functions/`; pruebas con emuladores en `tests-emu/` (Vitest) y `e2e/` (Playwright).
 - **I1a:** el frontend Vue consume Firebase contra **Emulator Suite** (Auth anónimo, canje `redeemCode` y lecturas por rol). La subida de archivos permanece **deshabilitada en la interfaz**.
-- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`.
+- **I1b:** sesión/entorno con **fallo cerrado** y **flujo de diagnóstico** (encuesta A1–A6 + tareas T1–T5, borrador y envío inmutable) en la interfaz.
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`.
 
 ```bash
-npm run emu:test        # 40 pruebas de emulador + 10 de navegador
+npm run emu:test        # 43 pruebas de emulador + 14 de navegador
 npm run emu:start       # emuladores en modo interactivo
 ```
 
@@ -104,7 +105,8 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - **I0b / I0c:** esquema SQL y pruebas PostgreSQL → **archivados** en `docs/archivo-supabase/` (sustituidos por Firebase).
 - **I0d / I0e:** backend Firebase (Auth, Firestore, Storage, Functions) con reglas endurecidas, probado con Emulator Suite.
 - **I1a:** frontend Vue conectado a Firebase **solo en emuladores** (Auth anónimo, canje, lecturas por rol). Subida de archivos deshabilitada en la UI.
-- **Fuera de alcance todavía:** App Check exigido, proveedor institucional docente, subida de archivos en la UI, flujo de diagnóstico en cliente, retención/consentimiento, despliegue y datos reales.
+- **I1b:** sesión/entorno con fallo cerrado y flujo de diagnóstico (encuesta A1–A6 + T1–T5) en la interfaz, solo en emuladores.
+- **Fuera de alcance todavía:** App Check exigido, proveedor institucional docente, subida de archivos en la UI, panel docente del diagnóstico, retención/consentimiento, despliegue y datos reales.
 
 ## Informes
 
@@ -113,5 +115,6 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - `docs/I0d-RESULTADOS.md` — backend Firebase, matriz permitido/denegado y pendientes.
 - `docs/I0e-RESULTADOS.md` — endurecimiento (reservas, rate limit, permisos, encuesta).
 - `docs/I1a-RESULTADOS.md` — frontend conectado a Firebase y correcciones de I0e.
+- `docs/I1b-RESULTADOS.md` — sesión/entorno con fallo cerrado y flujo de diagnóstico.
 - `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.
 

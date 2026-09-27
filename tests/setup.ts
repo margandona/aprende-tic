@@ -7,6 +7,7 @@ vi.mock('../src/firebase/client', () => ({
   db: {},
   functions: {},
   storage: {},
+  usingEmulators: true,
 }))
 
 vi.mock('firebase/auth', () => ({
@@ -14,3 +15,13 @@ vi.mock('firebase/auth', () => ({
   signInAnonymously: vi.fn(async () => ({ user: { uid: 'test-uid' } })),
   signOut: vi.fn(async () => {}),
 }))
+
+// La guarda de navegación no debe revalidar contra Firestore en pruebas unitarias.
+vi.mock('../src/stores/session', async (importActual) => {
+  const actual = await importActual<typeof import('../src/stores/session')>()
+  return {
+    ...actual,
+    ensureSession: vi.fn(async () => {}),
+    revalidateBinding: vi.fn(async () => {}),
+  }
+})

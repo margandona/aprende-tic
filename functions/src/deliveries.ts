@@ -111,12 +111,46 @@ export const submitEvidence = onCall(async (request) => {
   const reservationId = request.data?.reservationId ? String(request.data.reservationId) : null
   if (!deliveryId || !submitKey) throw new HttpsError('invalid-argument', 'deliveryId y submitKey son obligatorios.')
 
+  // Idempotencia (camino rápido): el mismo submit_key devuelve el recibo sin re-consumir la reserva.
+  const existingEvidence = await db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`).get()
+  if (existingEvidence.exists) {
+    return { evidenceId: submitKey, version: existingEvidence.data()!.version as number, reused: true }
+  }
+
+  // Verificación externa (fuera de la transacción): la operación de Storage no participa
+  // en la transacción de Firestore y así no se repite en reintentos.
+  let storagePath: string | null = null
+  if (reservationId) {
+    const rSnap = await db.doc(`uploadReservations/${reservationId}`).get()
+    if (!rSnap.exists) throw new HttpsError('failed-precondition', 'Reserva de archivo inválida.')
+    const r = rSnap.data()!
+    if (r.deliveryId !== deliveryId || r.ownerEnrollmentId !== binding.enrollmentId) {
+      throw new HttpsError('failed-precondition', 'Reserva de archivo inválida.')
+    }
+    if (r.state !== 'reserved') throw new HttpsError('failed-precondition', 'La reserva no está disponible.')
+    if ((r.expiresAt as Timestamp).toMillis() <= Date.now()) {
+      throw new HttpsError('failed-precondition', 'La reserva de archivo caducó.')
+    }
+    storagePath = r.storagePath as string
+
+    let meta: { contentType?: string; size?: string | number } | undefined
+    const bucketName = `${process.env.GCLOUD_PROJECT ?? 'demo-red-tic'}.appspot.com`
+    try {
+      const [m] = await getStorage().bucket(bucketName).file(storagePath).getMetadata()
+      meta = m
+    } catch {
+      throw new HttpsError('failed-precondition', 'El archivo reservado no existe en Storage.')
+    }
+    if (meta.contentType !== r.contentType || Number(meta.size) !== Number(r.sizeBytes)) {
+      throw new HttpsError('failed-precondition', 'El archivo no coincide con la reserva (tipo o tamaño).')
+    }
+  }
+
   return db.runTransaction(async (tx: Transaction) => {
     const deliveryRef = db.doc(`deliveries/${deliveryId}`)
     const evidenceRef = db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`)
     const reservationRef = reservationId ? db.doc(`uploadReservations/${reservationId}`) : null
 
-    // Lecturas primero.
     const deliverySnap = await tx.get(deliveryRef)
     const evidenceSnap = await tx.get(evidenceRef)
     const reservationSnap = reservationRef ? await tx.get(reservationRef) : null
@@ -132,35 +166,10 @@ export const submitEvidence = onCall(async (request) => {
     if (!['not_started', 'in_progress'].includes(d.state as string)) {
       throw new HttpsError('failed-precondition', 'La entrega no admite envíos en su estado actual.')
     }
-
-    let storagePath: string | null = null
     if (reservationRef) {
       const r = reservationSnap?.data()
-      if (
-        !reservationSnap?.exists ||
-        !r ||
-        r.deliveryId !== deliveryId ||
-        r.ownerEnrollmentId !== binding.enrollmentId ||
-        r.state !== 'reserved'
-      ) {
-        throw new HttpsError('failed-precondition', 'Reserva de archivo inválida.')
-      }
-      if ((r.expiresAt as Timestamp).toMillis() <= Date.now()) {
-        throw new HttpsError('failed-precondition', 'La reserva de archivo caducó.')
-      }
-      storagePath = r.storagePath as string
-
-      // Verifica el objeto real (existencia, MIME y tamaño) antes de consumir la reserva.
-      let meta: { contentType?: string; size?: string | number } | undefined
-      const bucketName = `${process.env.GCLOUD_PROJECT ?? 'demo-red-tic'}.appspot.com`
-      try {
-        const [m] = await getStorage().bucket(bucketName).file(storagePath).getMetadata()
-        meta = m
-      } catch {
-        throw new HttpsError('failed-precondition', 'El archivo reservado no existe en Storage.')
-      }
-      if (meta.contentType !== r.contentType || Number(meta.size) !== Number(r.sizeBytes)) {
-        throw new HttpsError('failed-precondition', 'El archivo no coincide con la reserva (tipo o tamaño).')
+      if (!reservationSnap?.exists || !r || r.state !== 'reserved' || (r.expiresAt as Timestamp).toMillis() <= Date.now()) {
+        throw new HttpsError('failed-precondition', 'Reserva de archivo no disponible.')
       }
     }
 

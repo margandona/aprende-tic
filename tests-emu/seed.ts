@@ -86,7 +86,7 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`teacherCourses/${IDS.t2}_${IDS.courseY}`), { teacherUid: IDS.t2, courseId: IDS.courseY, role: 'facilitator' })
   b.set(adminDb.doc(`teacherCourses/${IDS.t3}_${IDS.courseX}`), { teacherUid: IDS.t3, courseId: IDS.courseX, role: 'facilitator' })
 
-  b.set(adminDb.doc(`enrollments/${IDS.s1}`), { courseId: IDS.courseX, pseudonym: 'Zorro-01', state: 'active', activeCodeHash: hashCode(IDS.codeS1) })
+  b.set(adminDb.doc(`enrollments/${IDS.s1}`), { courseId: IDS.courseX, pseudonym: 'Zorro-01', state: 'active', activeCodeHash: hashCode(IDS.codeS1), surveySubmitted: true })
   b.set(adminDb.doc(`enrollments/${IDS.s2}`), { courseId: IDS.courseX, pseudonym: 'Puma-02', state: 'active', activeCodeHash: hashCode(IDS.codeS2) })
   b.set(adminDb.doc(`enrollments/${IDS.s3}`), { courseId: IDS.courseY, pseudonym: 'Condor-03', state: 'active', activeCodeHash: hashCode(IDS.codeS3) })
 
@@ -143,6 +143,29 @@ export async function seedSynthetic(): Promise<void> {
     courseId: IDS.courseX, enrollmentId: IDS.s1, indicatorCode: IDS.indicatorE1, milestoneId: IDS.milestone1,
     level: 'developing', comment: 'Distingue necesidad de suposición; agrega evidencia del contexto.', evidenceId: 'ev1', validatedBy: IDS.t1, validatedAt: Timestamp.now(),
   })
+
+  // Diagnóstico enviado (S1) para lectura docente y visualización de solo lectura.
+  b.set(adminDb.doc(`conditionsSurveys/${IDS.s1}`), {
+    courseId: IDS.courseX, enrollmentId: IDS.s1, schemaVersion: 1,
+    answers: { A1: 'teléfono propio', A2: 'en el colegio', A3: 'leer pasos', A4: 'ninguna', A5: 'sí', A6: 'usar ClaveÚnica' },
+    submittedAt: Timestamp.now(),
+  })
+  b.set(adminDb.doc(`diagnosisAttempts/${IDS.s1}_pre`), {
+    courseId: IDS.courseX, enrollmentId: IDS.s1, kind: 'pre', diagnosisVersionId: 'pre-v1',
+    modality: 'digital', status: 'submitted', submittedAt: Timestamp.now(), createdAt: Timestamp.now(),
+  })
+  const diagTasks = ['T1', 'T2', 'T3', 'T4', 'T5']
+  for (const taskCode of diagTasks) {
+    b.set(adminDb.doc(`diagnosisAttempts/${IDS.s1}_pre/responses/${taskCode}`), {
+      taskCode,
+      responseStatus: 'answered',
+      responseText: `Respuesta sintética de ${taskCode}`,
+      technicalIssue: taskCode === 'T4',
+      supports: taskCode === 'T3' ? ['audio_reading'] : [],
+      score: taskCode === 'T1' ? 2 : null,
+      reviewerComment: taskCode === 'T1' ? 'Búsqueda pertinente y dos razones.' : '',
+    })
+  }
 
   await b.commit()
 }

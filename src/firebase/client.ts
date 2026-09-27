@@ -3,24 +3,18 @@ import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
 import { connectStorageEmulator, getStorage } from 'firebase/storage'
+import { resolveFirebaseConfig } from './config'
 
-// Configuración pública de SDK para el proyecto de EMULADORES (sin claves privadas).
-const firebaseConfig = {
-  projectId: 'demo-red-tic',
-  apiKey: 'demo-api-key',
-  appId: 'demo-app',
-  authDomain: 'demo-red-tic.firebaseapp.com',
-  storageBucket: 'demo-red-tic.appspot.com',
-}
+// Falla cerrado: sin configuración explícita (o con demo sin emuladores) el arranque lanza error.
+const { useEmulators, config } = resolveFirebaseConfig(import.meta.env)
 
-export const firebaseApp = initializeApp(firebaseConfig)
+export const firebaseApp = initializeApp(config)
 export const auth = getAuth(firebaseApp)
 export const db = getFirestore(firebaseApp)
 export const functions = getFunctions(firebaseApp)
 export const storage = getStorage(firebaseApp)
 
-// En desarrollo (o con VITE_USE_EMULATORS=true) la app apunta a Emulator Suite.
-const useEmulators = import.meta.env.DEV || import.meta.env.VITE_USE_EMULATORS === 'true'
+export const usingEmulators = useEmulators
 
 if (useEmulators) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })

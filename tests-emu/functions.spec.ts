@@ -199,3 +199,53 @@ describe('Endurecimiento · verificación de objeto y reserva', () => {
     await expect(submit({ deliveryId, submitKey: 'v4', format: 'file', description: 'x', reservationId })).rejects.toThrow()
   })
 })
+
+describe('Diagnóstico · encuesta, respuestas, envío y revisión', () => {
+  const survey = { A1: 'teléfono propio', A2: 'en el colegio', A3: 'leer pasos', A4: 'ninguna', A5: 'sí', A6: 'trámite' }
+
+  it('guarda encuesta y respuestas, y el envío es inmutable', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    await httpsCallable(s.functions, 'saveConditionsSurvey')({ answers: survey })
+    const { attemptId } = (
+      await httpsCallable<{ kind: string }, { attemptId: string }>(s.functions, 'startDiagnosisAttempt')({ kind: 'pre' })
+    ).data
+    const saveResp = httpsCallable(s.functions, 'saveDiagnosisResponse')
+    await saveResp({ attemptId, taskCode: 'T1', responseStatus: 'answered', responseText: 'respuesta', technicalIssue: false, supports: ['audio_reading'] })
+    await saveResp({ attemptId, taskCode: 'T2', responseStatus: 'not_answered', responseText: '', technicalIssue: true, supports: [] })
+    await httpsCallable(s.functions, 'submitDiagnosisAttempt')({ attemptId })
+
+    // Inmutable tras el envío.
+    await expect(saveResp({ attemptId, taskCode: 'T3', responseStatus: 'answered', responseText: 'x', technicalIssue: false, supports: [] })).rejects.toThrow()
+
+    const t1 = await adminDb.doc(`diagnosisAttempts/${attemptId}/responses/T1`).get()
+    expect(t1.data()?.supports).toEqual(['audio_reading'])
+    const t2 = await adminDb.doc(`diagnosisAttempts/${attemptId}/responses/T2`).get()
+    expect(t2.data()?.responseStatus).toBe('not_answered')
+    expect(t2.data()?.technicalIssue).toBe(true)
+    expect(t2.data()?.score ?? null).toBeNull()
+    const enroll = await adminDb.doc(`enrollments/${IDS.s2}`).get()
+    expect(enroll.data()?.surveySubmitted).toBe(true)
+  })
+
+  it('el docente revisa solo tras el envío; otro docente no puede', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    await httpsCallable(s.functions, 'saveConditionsSurvey')({ answers: survey })
+    const { attemptId } = (
+      await httpsCallable<{ kind: string }, { attemptId: string }>(s.functions, 'startDiagnosisAttempt')({ kind: 'pre' })
+    ).data
+    await httpsCallable(s.functions, 'saveDiagnosisResponse')({ attemptId, taskCode: 'T1', responseStatus: 'answered', responseText: 'r', technicalIssue: false, supports: [] })
+
+    const t1 = await teacherClient(IDS.t1)
+    const review = httpsCallable(t1.functions, 'reviewDiagnosisResponse')
+    await expect(review({ attemptId, taskCode: 'T1', score: 2, reviewerComment: 'x' })).rejects.toThrow()
+
+    await httpsCallable(s.functions, 'submitDiagnosisAttempt')({ attemptId })
+    await review({ attemptId, taskCode: 'T1', score: 2, reviewerComment: 'Bien.' })
+    expect((await adminDb.doc(`diagnosisAttempts/${attemptId}/responses/T1`).get()).data()?.score).toBe(2)
+
+    const t2 = await teacherClient(IDS.t2)
+    await expect(httpsCallable(t2.functions, 'reviewDiagnosisResponse')({ attemptId, taskCode: 'T1', score: 1 })).rejects.toThrow()
+  })
+})

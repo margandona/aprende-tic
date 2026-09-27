@@ -36,17 +36,6 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/teams/$(d.teamId)/members/$(myEnrollmentId())))
         || isTeacherOfCourse(d.courseId);
     }
-    function validAnswers(a) {
-      return a is map
-        && a.keys().hasOnly(['A1', 'A2', 'A3', 'A4', 'A5', 'A6'])
-        && a.keys().hasAll(['A1', 'A2', 'A3', 'A4', 'A5', 'A6'])
-        && a.A1 is string && a.A1.size() <= 500
-        && a.A2 is string && a.A2.size() <= 500
-        && a.A3 is string && a.A3.size() <= 500
-        && a.A4 is string && a.A4.size() <= 500
-        && a.A5 is string && a.A5.size() <= 500
-        && a.A6 is string && a.A6.size() <= 500;
-    }
 
     // ── Catálogo: solo sesión vinculada o docente activo ─────────────────
     match /institutions/{id} { allow read: if activeBinding() || isActiveTeacher(); allow write: if false; }
@@ -142,16 +131,10 @@ service cloud.firestore {
       }
     }
 
-    // ── Encuesta de condiciones (esquema validado) ───────────────────────
+    // ── Encuesta de condiciones (solo servidor; lectura docente) ─────────
     match /conditionsSurveys/{enrollmentId} {
       allow read: if isTeacherOfCourse(resource.data.courseId);
-      allow create: if activeBinding()
-        && request.resource.data.keys().hasOnly(['enrollmentId', 'courseId', 'schemaVersion', 'answers', 'submittedAt'])
-        && request.resource.data.enrollmentId == myEnrollmentId()
-        && request.resource.data.courseId == myCourseId()
-        && request.resource.data.schemaVersion == 1
-        && validAnswers(request.resource.data.answers);
-      allow update, delete: if false;
+      allow write: if false;
     }
 
     match /{document=**} { allow read, write: if false; }
