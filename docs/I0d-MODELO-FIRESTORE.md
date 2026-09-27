@@ -31,11 +31,13 @@
 | `milestones/{id}` | missionId, order, title, xpValue, indicatorCodes[] | lectura autenticada |
 | `indicators/{code}` | code, axis, name, descriptor | lectura autenticada |
 | `badges/{id}` | code, name, criterion | lectura autenticada |
-| `teachers/{uid}` | displayName, status | propio |
+| `teachers/{uid}` | displayName, **status** (gobierna la autorización) | propio |
 | `teacherCourses/{uid}_{courseId}` | teacherUid, courseId, role | propio |
 | `enrollments/{enrollmentId}` | courseId, pseudonym, state, activeCodeHash, activeBindingUid | propio o docente del curso |
 | `codeCredentials/{codeHash}` | enrollmentId, courseId, state, expiresAt, failedAttempts, lockedUntil | **sin acceso cliente** |
 | `sessionBindings/{authUid}` | enrollmentId, courseId, state, issuedAt, expiresAt | propio (lectura) |
+| `uploadReservations/{id}` | courseId, enrollmentId, deliveryId, ownerEnrollmentId, fileName, contentType, sizeBytes, storagePath, state, expiresAt | **sin acceso cliente** (lo coteja Storage Rules) |
+| `redeemRate/{actorHash}` | windowStart, count | **sin acceso cliente** |
 | `teams/{teamId}` + `members/{enrollmentId}` | courseId, name / role | lectura autenticada |
 | `deliveries/{deliveryId}` | courseId, ownerEnrollmentId, milestoneId, scope, teamId, state, currentEvidenceId, evidenceCount | propietario, coautor o docente |
 | `deliveries/{deliveryId}/evidence/{submitKey}` | version, origin, format, testModality, description, deletedAt | ídem |
@@ -45,8 +47,8 @@
 | `xpEvents/{enrollmentId}_{milestoneId}_{programVersionId}` | xpValue, validatedBy, revokedAt | propio o docente |
 | `badgeAwards/{enrollmentId}_{badgeId}` | badgeId, evidenceId | propio o docente |
 | `diagnosisAttempts/{id}` + `responses/{taskCode}` | courseId, enrollmentId, status, score, technicalIssue | propio o docente |
-| `conditionsSurveys/{enrollmentId}` | courseId, answers | crea el estudiante; lee el docente |
-| `redeemAttempts/{autoId}`, `auditLogs/{autoId}` | actorKey/actorUid, acción | **sin acceso cliente** |
+| `conditionsSurveys/{enrollmentId}` | courseId, schemaVersion, answers{A1..A6} (esquema validado) | crea el estudiante; lee el docente |
+| `redeemRate/{actorHash}`, `auditLogs/{autoId}` | contador de intentos / auditoría | **sin acceso cliente** |
 
 **Estados de entrega:** `not_started` → `in_progress` → `pending_review` → `achieved`.
 **Estados del diagnóstico:** `draft` → `submitted` (inmutable después).
@@ -71,8 +73,10 @@
 
 | Operación | Invariante | Mecanismo |
 |---|---|---|
-| `redeemCode` | 1 binding activo por matrícula y por uid | transacción + `enrollments.activeBindingUid` |
-| `submitEvidence` | 1 evidencia por `submitKey` | transacción + `tx.create` sobre `evidence/{submitKey}` |
+| `redeemCode` | 1 binding activo por matrícula y por uid; límite por actor | transacción + `enrollments.activeBindingUid` + contador `redeemRate/{actor}` |
+| `reserveUpload` | 1 reserva por archivo; Storage coteja curso/matrícula/entrega/nombre/MIME/tamaño | documento `uploadReservations/{id}` + `storage.rules` |
+| `submitEvidence` | 1 evidencia por `submitKey`; consume la reserva | transacción + `tx.create` + `uploadReservations.state='consumed'` |
+| `startDelivery` | no reinicia una entrega existente | `ref.create` + manejo de existencia |
 | `registerEquivalentEvidence` | sin entrega digital previa; versión incremental | transacción + merge |
 | `validateMilestone` | validación completa; 1 XP por (matrícula, hito, versión) | transacción + ID determinista de `xpEvents` |
 | `correctAssessment` / `revokeXp` / `reopenMilestone` | historial y revocación trazables | transacción / update |
@@ -99,6 +103,8 @@
 | objetos de Storage | fin de año + 1 | eliminar |
 | `assessments` / `xpEvents` | 2 años | anonimizar |
 | `sessionBindings` | 30 días tras expirar | eliminar |
+| `uploadReservations` | 30 min tras expirar | eliminar |
+| `redeemRate` | ventana de 10 min | eliminar |
 | `auditLogs` | 1 año | eliminar |
 
 > Plazos **propuestos**; se fijan con la institución antes de cualquier piloto real.

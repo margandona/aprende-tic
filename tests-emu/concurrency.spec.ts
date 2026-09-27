@@ -1,8 +1,8 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { httpsCallable } from 'firebase/functions'
 import { IDS, adminDb, seedSynthetic, studentClient, teacherClient } from './helpers'
 
-beforeAll(async () => {
+beforeEach(async () => {
   await seedSynthetic()
 })
 
@@ -40,5 +40,28 @@ describe('Concurrencia · reintentos simultáneos', () => {
 
     const xp = await adminDb.collection('xpEvents').where('enrollmentId', '==', IDS.s2).where('milestoneId', '==', IDS.milestone2).get()
     expect(xp.size).toBe(1)
+  })
+
+  it('canjes concurrentes con códigos distintos y mismo actor agotan el límite por actor', async () => {
+    const clients = await Promise.all(Array.from({ length: 12 }, () => studentClient()))
+    const results = await Promise.allSettled(
+      clients.map((c, i) => httpsCallable<{ code: string }, { status: string }>(c.functions, 'redeemCode')({ code: `NO-${i}` })),
+    )
+    const statuses = results.map((r) => (r.status === 'fulfilled' ? r.value.data.status : 'rejected'))
+    const limited = statuses.filter((s) => s === 'rate_limited').length
+    expect(limited).toBeGreaterThan(0)
+  })
+
+  it('startDelivery concurrente no reinicia la entrega', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
+    const [a, b] = await Promise.all([start({ milestoneId: IDS.milestone1 }), start({ milestoneId: IDS.milestone1 })])
+    expect(a.data.deliveryId).toBe(b.data.deliveryId)
+    expect((await adminDb.doc(`deliveries/${a.data.deliveryId}`).get()).data()?.state).toBe('not_started')
+
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId: a.data.deliveryId, submitKey: 'sd1', format: 'text', description: 'x' })
+    await start({ milestoneId: IDS.milestone1 })
+    expect((await adminDb.doc(`deliveries/${a.data.deliveryId}`).get()).data()?.state).toBe('pending_review')
   })
 })

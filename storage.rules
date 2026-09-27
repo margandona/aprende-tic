@@ -1,8 +1,9 @@
 rules_version = '2';
 
-// RED-TIC · Storage Security Rules (I0d)
+// RED-TIC · Storage Security Rules (I0e endurecido)
 // Ruta: courses/{courseId}/enrollments/{enrollmentId}/deliveries/{deliveryId}/uploads/{reservationId}/{fileName}
-// Comprueba: autenticación, vínculo activo, curso, matrícula, estado de la entrega y tipo/tamaño.
+// La creación exige una RESERVA real (uploadReservations/{reservationId}) que coteja
+// curso, matrícula, entrega, propietario, nombre, MIME y tamaño. Además, vínculo activo.
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -19,38 +20,48 @@ service firebase.storage {
     function delivery(deliveryId) {
       return firestore.get(/databases/(default)/documents/deliveries/$(deliveryId)).data;
     }
+    function reservation(id) {
+      return firestore.get(/databases/(default)/documents/uploadReservations/$(id)).data;
+    }
     function teacherOf(courseId) {
       return request.auth != null
+        && firestore.exists(/databases/(default)/documents/teachers/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/teachers/$(request.auth.uid)).data.status == 'active'
         && firestore.exists(/databases/(default)/documents/teacherCourses/$(request.auth.uid + '_' + courseId));
     }
-    function allowedType() {
-      return request.resource.contentType == 'text/plain'
-        || request.resource.contentType == 'application/pdf'
-        || request.resource.contentType == 'image/png'
-        || request.resource.contentType == 'image/jpeg'
-        || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    function memberOf(teamId, enrollmentId) {
+      return firestore.exists(/databases/(default)/documents/teams/$(teamId)/members/$(enrollmentId));
     }
 
     match /courses/{courseId}/enrollments/{enrollmentId}/deliveries/{deliveryId}/uploads/{reservationId}/{fileName} {
       allow read: if (
-        (
-          activeBinding()
+        (activeBinding()
           && binding().enrollmentId == enrollmentId
           && delivery(deliveryId) != null
-          && delivery(deliveryId).ownerEnrollmentId == enrollmentId
-        )
+          && delivery(deliveryId).ownerEnrollmentId == enrollmentId)
+        || (activeBinding()
+          && binding().courseId == courseId
+          && delivery(deliveryId) != null
+          && delivery(deliveryId).teamId != null
+          && memberOf(delivery(deliveryId).teamId, binding().enrollmentId))
         || teacherOf(courseId)
       );
 
       allow create: if activeBinding()
         && binding().enrollmentId == enrollmentId
         && binding().courseId == courseId
-        && delivery(deliveryId) != null
-        && delivery(deliveryId).courseId == courseId
-        && delivery(deliveryId).ownerEnrollmentId == enrollmentId
-        && delivery(deliveryId).state in ['not_started', 'in_progress']
-        && request.resource.size < 5 * 1024 * 1024
-        && allowedType();
+        && firestore.exists(/databases/(default)/documents/uploadReservations/$(reservationId))
+        && reservation(reservationId) != null
+        && reservation(reservationId).state == 'reserved'
+        && reservation(reservationId).expiresAt > request.time
+        && reservation(reservationId).courseId == courseId
+        && reservation(reservationId).enrollmentId == enrollmentId
+        && reservation(reservationId).deliveryId == deliveryId
+        && reservation(reservationId).ownerEnrollmentId == enrollmentId
+        && reservation(reservationId).fileName == fileName
+        && reservation(reservationId).contentType == request.resource.contentType
+        && reservation(reservationId).sizeBytes == request.resource.size
+        && request.resource.size <= 5 * 1024 * 1024;
 
       allow update, delete: if false;
     }

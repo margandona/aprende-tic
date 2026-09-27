@@ -15,78 +15,78 @@ import {
 } from './guards'
 
 /** Resultado del canje. */
-type RedeemFail = { status: 'invalid' | 'revoked' | 'expired' | 'locked' }
+type RedeemFail = { status: 'invalid' | 'revoked' | 'expired' | 'locked' | 'rate_limited' }
 type RedeemOk = { status: 'ok'; enrollmentId: string; courseId: string; pseudonym: string; expiresAt: Timestamp }
 
+const APP_CHECK = process.env.ENFORCE_APP_CHECK === 'true'
+
 /** Canje de código individual → vínculo (binding) revocable. */
-export const redeemCode = onCall(async (request) => {
+export const redeemCode = onCall({ enforceAppCheck: APP_CHECK }, async (request) => {
   const uid = assertSignedIn(request)
   const code = String(request.data?.code ?? '')
   if (code.trim().length === 0) throw new HttpsError('invalid-argument', 'Código requerido.')
   const actorKey = actorKeyFrom(request)
   const hash = hashCode(code)
   const credRef = db.doc(`codeCredentials/${hash}`)
+  // Contador acotado por actor (una sola escritura por actor y ventana).
+  const rateRef = db.doc(`redeemRate/${hashCode('rate:' + actorKey)}`)
   const now = Date.now()
-
-  // Límite por borde confiable (ventana).
-  const windowStart = Timestamp.fromMillis(now - CONSTANTS.rateWindowMinutes * 60 * 1000)
-  const recent = await db
-    .collection('redeemAttempts')
-    .where('actorKey', '==', actorKey)
-    .where('attemptedAt', '>', windowStart)
-    .get()
-  if (recent.size >= CONSTANTS.rateMax) {
-    throw new HttpsError('resource-exhausted', 'Demasiados intentos de canje.')
-  }
+  const windowMs = CONSTANTS.rateWindowMinutes * 60 * 1000
 
   const result = await db.runTransaction(async (tx: Transaction): Promise<RedeemFail | RedeemOk> => {
+    // ── Lecturas (todas antes de escribir) ──
+    const rateSnap = await tx.get(rateRef)
     const credSnap = await tx.get(credRef)
-    const fail = (status: RedeemFail['status']): RedeemFail => {
-      tx.set(db.collection('redeemAttempts').doc(), {
-        actorKey,
-        attemptedAt: Timestamp.now(),
-        success: false,
-      })
-      return { status }
-    }
-
-    if (!credSnap.exists) return fail('invalid')
-    const cred = credSnap.data()!
-    const enrollmentId = cred.enrollmentId as string
-
-    const enrollmentRef = db.doc(`enrollments/${enrollmentId}`)
-    const enrollmentSnap = await tx.get(enrollmentRef)
-    if (!enrollmentSnap.exists) return fail('invalid')
-    const enrollment = enrollmentSnap.data()!
+    const cred = credSnap.exists ? credSnap.data()! : null
+    const enrollmentId = (cred?.enrollmentId as string | undefined) ?? null
+    const enrollmentRef = enrollmentId ? db.doc(`enrollments/${enrollmentId}`) : null
+    const enrollmentSnap = enrollmentRef ? await tx.get(enrollmentRef) : null
 
     const priorRef = db.doc(`sessionBindings/${uid}`)
-    const activeUid = enrollment.activeBindingUid as string | undefined
-    const activeRef = activeUid ? db.doc(`sessionBindings/${activeUid}`) : null
     const priorSnap = await tx.get(priorRef)
+    const activeUid = enrollmentSnap?.data()?.activeBindingUid as string | undefined
+    const activeRef = activeUid && activeUid !== uid ? db.doc(`sessionBindings/${activeUid}`) : null
     const activeSnap = activeRef ? await tx.get(activeRef) : null
+
+    // ── Límite transaccional por actor ──
+    const rateData = rateSnap.data()
+    const windowStart = rateData?.windowStart as Timestamp | undefined
+    const withinWindow = windowStart ? now - windowStart.toMillis() < windowMs : false
+    const count = withinWindow ? ((rateData?.count as number) ?? 0) : 0
+    if (count >= CONSTANTS.rateMax) {
+      return { status: 'rate_limited' }
+    }
+    tx.set(rateRef, {
+      windowStart: withinWindow && windowStart ? windowStart : Timestamp.fromMillis(now),
+      count: count + 1,
+      updatedAt: Timestamp.now(),
+    })
+
+    if (!cred || !enrollmentSnap?.exists) return { status: 'invalid' }
+    const enrollment = enrollmentSnap.data()!
 
     if (cred.state !== 'active') {
       tx.update(credRef, { failedAttempts: FieldValue.increment(1), lastFailedAt: Timestamp.now() })
-      return fail('revoked')
+      return { status: 'revoked' }
     }
     if (cred.expiresAt && (cred.expiresAt as Timestamp).toMillis() <= now) {
       tx.update(credRef, { failedAttempts: FieldValue.increment(1), lastFailedAt: Timestamp.now() })
-      return fail('expired')
+      return { status: 'expired' }
     }
     if (cred.lockedUntil && (cred.lockedUntil as Timestamp).toMillis() > now) {
       tx.update(credRef, { failedAttempts: FieldValue.increment(1), lastFailedAt: Timestamp.now() })
-      return fail('locked')
+      return { status: 'locked' }
     }
-    if ((cred.failedAttempts ?? 0) >= CONSTANTS.maxAttempts) {
+    if (((cred.failedAttempts as number) ?? 0) >= CONSTANTS.maxAttempts) {
       tx.update(credRef, {
         failedAttempts: FieldValue.increment(1),
         lockedUntil: Timestamp.fromMillis(now + CONSTANTS.lockMinutes * 60 * 1000),
       })
-      return fail('locked')
+      return { status: 'locked' }
     }
 
-    // Revoca vínculos previos (de la matrícula o del propio uid).
-    if (activeSnap?.exists && activeRef && activeRef.path !== priorRef.path) {
+    // ── Revoca vínculos previos y crea el nuevo ──
+    if (activeRef && activeSnap?.exists) {
       tx.update(activeRef, { state: 'revoked', revokedAt: Timestamp.now(), revokedReason: 'nuevo canje' })
     }
     if (priorSnap.exists) {
@@ -101,13 +101,12 @@ export const redeemCode = onCall(async (request) => {
       issuedAt: Timestamp.now(),
       expiresAt,
     })
-    tx.update(enrollmentRef, { activeBindingUid: uid })
+    tx.update(enrollmentRef!, { activeBindingUid: uid })
     tx.update(credRef, { lastUsedAt: Timestamp.now(), failedAttempts: 0, lockedUntil: null })
-    tx.set(db.collection('redeemAttempts').doc(), { actorKey, attemptedAt: Timestamp.now(), success: true })
 
     return {
       status: 'ok',
-      enrollmentId,
+      enrollmentId: enrollmentId!,
       courseId: enrollment.courseId as string,
       pseudonym: enrollment.pseudonym as string,
       expiresAt,
@@ -126,7 +125,7 @@ export const redeemCode = onCall(async (request) => {
 })
 
 /** Regenera el código individual (docente del curso). Devuelve el texto una sola vez. */
-export const regenerateCode = onCall(async (request) => {
+export const regenerateCode = onCall({ enforceAppCheck: APP_CHECK }, async (request) => {
   const uid = assertSignedIn(request)
   const enrollmentId = String(request.data?.enrollmentId ?? '')
   const courseId = await courseOfEnrollment(enrollmentId)
@@ -172,7 +171,7 @@ export const regenerateCode = onCall(async (request) => {
 })
 
 /** Revoca de inmediato el vínculo activo (docente del curso). */
-export const revokeSession = onCall(async (request) => {
+export const revokeSession = onCall({ enforceAppCheck: APP_CHECK }, async (request) => {
   const uid = assertSignedIn(request)
   const enrollmentId = String(request.data?.enrollmentId ?? '')
   const reason = String(request.data?.reason ?? 'revocación docente')

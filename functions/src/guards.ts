@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore'
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
@@ -9,11 +9,22 @@ if (getApps().length === 0) {
 
 export const db = getFirestore()
 
+export const EMULATOR_PEPPER = 'emulator-synthetic-pepper'
+
+export function isEmulator(): boolean {
+  return process.env.FUNCTIONS_EMULATOR === 'true' || Boolean(process.env.FIRESTORE_EMULATOR_HOST)
+}
+
 /**
- * Pimiento del servidor. En desarrollo/emulador se usa uno sintético;
- * en producción CODE_PEPPER debe ser un secreto del servidor (nunca en el cliente).
+ * Pimiento del servidor. **Falla cerrado** fuera del emulador: si CODE_PEPPER no está
+ * configurado en producción, el hash de códigos lanza error en vez de usar un valor por defecto.
  */
-export const PEPPER = process.env.CODE_PEPPER || 'dev-synthetic-pepper'
+function pepper(): string {
+  const value = process.env.CODE_PEPPER
+  if (value && value.trim().length > 0) return value
+  if (isEmulator()) return EMULATOR_PEPPER
+  throw new Error('CODE_PEPPER no configurado: el hash de códigos falla cerrado fuera del emulador.')
+}
 
 export const CONSTANTS = {
   sessionHours: 12,
@@ -22,16 +33,30 @@ export const CONSTANTS = {
   lockMinutes: 15,
   rateWindowMinutes: 10,
   rateMax: 10,
+  reservationMinutes: 30,
+  maxUploadBytes: 5 * 1024 * 1024,
 }
+
+export const ALLOWED_MIME = [
+  'text/plain',
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]
 
 export function hashCode(code: string): string {
-  return createHash('sha256').update(`${PEPPER}:${code.trim().toUpperCase()}:${PEPPER}`).digest('hex')
+  const p = pepper()
+  return createHash('sha256').update(`${p}:${code.trim().toUpperCase()}:${p}`).digest('hex')
 }
 
-/** Código de alta entropía (24 hex ≈ 96 bits). */
+/** Código de alta entropía con generación criptográficamente segura (128 bits). */
 export function generateCode(): string {
-  const hex = () => createHash('sha256').update(`${Date.now()}:${Math.random()}:${PEPPER}`).digest('hex')
-  return (hex() + hex()).slice(0, 24).toUpperCase()
+  return randomBytes(16).toString('hex').toUpperCase()
+}
+
+export function newId(): string {
+  return randomBytes(16).toString('hex')
 }
 
 export function assertSignedIn(request: CallableRequest): string {
@@ -40,8 +65,17 @@ export function assertSignedIn(request: CallableRequest): string {
   return uid
 }
 
-/** Clave de actor derivada del borde confiable (IP del servidor), no del cliente. */
+/**
+ * Clave de actor derivada del borde confiable. Considera proxy/NAT (x-forwarded-for)
+ * y el caso sin IP (bucket compartido 'unknown-edge'). App Check es la protección de borde real.
+ */
 export function actorKeyFrom(request: CallableRequest): string {
+  const headers = request.rawRequest?.headers ?? {}
+  const forwarded = headers['x-forwarded-for']
+  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded
+  if (typeof first === 'string' && first.trim().length > 0) {
+    return first.split(',')[0].trim()
+  }
   const ip = request.rawRequest?.ip
   return typeof ip === 'string' && ip.length > 0 ? ip : 'unknown-edge'
 }
@@ -62,9 +96,13 @@ export async function getActiveBinding(uid: string): Promise<Binding> {
   return data
 }
 
+/** Docente autorizado: adscripción al curso **y** docente con estado activo. */
 export async function isTeacherOfCourse(uid: string, courseId: string): Promise<boolean> {
-  const snap = await db.doc(`teacherCourses/${uid}_${courseId}`).get()
-  return snap.exists
+  const [adscription, teacher] = await Promise.all([
+    db.doc(`teacherCourses/${uid}_${courseId}`).get(),
+    db.doc(`teachers/${uid}`).get(),
+  ])
+  return adscription.exists && teacher.exists && teacher.data()?.status === 'active'
 }
 
 export async function assertTeacherOfCourse(uid: string, courseId: string): Promise<void> {

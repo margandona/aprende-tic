@@ -8,7 +8,7 @@ import { connectFirestoreEmulator, getFirestore as getClientFirestore } from 'fi
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
 
 export const PROJECT = 'demo-red-tic'
-const PEPPER = process.env.CODE_PEPPER || 'dev-synthetic-pepper'
+const PEPPER = process.env.CODE_PEPPER || 'emulator-synthetic-pepper'
 
 if (getApps().length === 0) {
   initializeApp({ projectId: PROJECT })
@@ -38,11 +38,13 @@ export const IDS = {
   indicatorD1: 'D1',
   indicatorE1: 'E1',
   teamX: 'team-x',
+  teamY: 'team-y',
   s1: 'enr-s1',
   s2: 'enr-s2',
   s3: 'enr-s3',
   t1: 'teacher-1',
   t2: 'teacher-2',
+  t3: 'teacher-3',
   codeS1: 'ZORRO-01',
   codeS2: 'PUMA-02',
   codeS3: 'CONDOR-03',
@@ -60,7 +62,7 @@ async function clearAll(): Promise<void> {
     'institutions', 'programVersions', 'courses', 'missions', 'milestones', 'indicators', 'badges',
     'teachers', 'teacherCourses', 'enrollments', 'codeCredentials', 'sessionBindings',
     'assessments', 'assessmentHistory', 'xpEvents', 'badgeAwards',
-    'conditionsSurveys', 'redeemAttempts', 'auditLogs',
+    'conditionsSurveys', 'uploadReservations', 'redeemRate', 'redeemAttempts', 'auditLogs',
   ]
   for (const c of collections) {
     const snap = await adminDb.collection(c).get()
@@ -90,8 +92,10 @@ export async function seedSynthetic(): Promise<void> {
 
   b.set(adminDb.doc(`teachers/${IDS.t1}`), { displayName: 'Docente Uno (ficticio)', status: 'active' })
   b.set(adminDb.doc(`teachers/${IDS.t2}`), { displayName: 'Docente Dos (ficticio)', status: 'active' })
+  b.set(adminDb.doc(`teachers/${IDS.t3}`), { displayName: 'Docente Tres (inactivo, ficticio)', status: 'inactive' })
   b.set(adminDb.doc(`teacherCourses/${IDS.t1}_${IDS.courseX}`), { teacherUid: IDS.t1, courseId: IDS.courseX, role: 'facilitator' })
   b.set(adminDb.doc(`teacherCourses/${IDS.t2}_${IDS.courseY}`), { teacherUid: IDS.t2, courseId: IDS.courseY, role: 'facilitator' })
+  b.set(adminDb.doc(`teacherCourses/${IDS.t3}_${IDS.courseX}`), { teacherUid: IDS.t3, courseId: IDS.courseX, role: 'facilitator' })
 
   b.set(adminDb.doc(`enrollments/${IDS.s1}`), { courseId: IDS.courseX, pseudonym: 'Zorro-01', state: 'active', activeCodeHash: hashCode(IDS.codeS1) })
   b.set(adminDb.doc(`enrollments/${IDS.s2}`), { courseId: IDS.courseX, pseudonym: 'Puma-02', state: 'active', activeCodeHash: hashCode(IDS.codeS2) })
@@ -108,6 +112,8 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`teams/${IDS.teamX}`), { courseId: IDS.courseX, name: 'Equipo Zorro-Puma' })
   b.set(adminDb.doc(`teams/${IDS.teamX}/members/${IDS.s1}`), { role: 'facilitación' })
   b.set(adminDb.doc(`teams/${IDS.teamX}/members/${IDS.s2}`), { role: 'diseño' })
+  b.set(adminDb.doc(`teams/${IDS.teamY}`), { courseId: IDS.courseY, name: 'Equipo de otro curso' })
+  b.set(adminDb.doc(`teams/${IDS.teamY}/members/${IDS.s3}`), { role: 'miembro' })
 
   // Entrega individual de S1 (para reglas de lectura y Storage) en curso X.
   b.set(adminDb.doc(`deliveries/${IDS.s1}_${IDS.milestone1}`), {
@@ -124,6 +130,12 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`deliveries/${IDS.s1}_${IDS.milestone2}/evidence/ev-team`), {
     version: 1, origin: 'student_digital', format: 'file', testModality: 'peer_simulation',
     description: 'Ficha del equipo', submitKey: 'ev-team', createdBy: IDS.s1, createdAt: Timestamp.now(), deletedAt: null,
+  })
+  // Caso adversarial: entrega del curso X vinculada a un equipo de OTRO curso.
+  b.set(adminDb.doc('deliveries/xc-course'), {
+    courseId: IDS.courseX, ownerEnrollmentId: IDS.s1, milestoneId: IDS.milestone1, scope: 'team',
+    teamId: IDS.teamY, state: 'in_progress', currentEvidenceId: null, evidenceCount: 0,
+    createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   })
 
   await b.commit()

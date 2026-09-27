@@ -1,5 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import {
+  ALLOWED_MIME,
+  CONSTANTS,
   Timestamp,
   type Transaction,
   assertSignedIn,
@@ -9,11 +11,12 @@ import {
   db,
   getActiveBinding,
   milestoneInCourse,
+  newId,
 } from './guards'
 
 export const deliveryIdFor = (enrollmentId: string, milestoneId: string) => `${enrollmentId}_${milestoneId}`
 
-/** Crea (idempotente) la entrega individual de un hito para la matrícula de la sesión. */
+/** Crea (idempotente y a prueba de carrera) la entrega individual de un hito. */
 export const startDelivery = onCall(async (request) => {
   const uid = assertSignedIn(request)
   const binding = await getActiveBinding(uid)
@@ -23,9 +26,9 @@ export const startDelivery = onCall(async (request) => {
   }
   const deliveryId = deliveryIdFor(binding.enrollmentId, milestoneId)
   const ref = db.doc(`deliveries/${deliveryId}`)
-  const snap = await ref.get()
-  if (!snap.exists) {
-    await ref.set({
+  try {
+    // create (no set): si ya existe, no reinicia el estado.
+    await ref.create({
       courseId: binding.courseId,
       ownerEnrollmentId: binding.enrollmentId,
       milestoneId,
@@ -37,11 +40,66 @@ export const startDelivery = onCall(async (request) => {
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     })
+  } catch {
+    const snap = await ref.get()
+    if (!snap.exists || snap.data()?.ownerEnrollmentId !== binding.enrollmentId) {
+      throw new HttpsError('permission-denied', 'Entrega no disponible para esta matrícula.')
+    }
   }
   return { deliveryId }
 })
 
-/** Envío idempotente de evidencia digital (submit_key). */
+/** Reserva de archivo: documento restringido que Storage Rules coteja. */
+export const reserveUpload = onCall(async (request) => {
+  const uid = assertSignedIn(request)
+  const binding = await getActiveBinding(uid)
+  const deliveryId = String(request.data?.deliveryId ?? '')
+  const fileName = String(request.data?.fileName ?? '')
+  const contentType = String(request.data?.contentType ?? '')
+  const sizeBytes = Number(request.data?.sizeBytes ?? 0)
+
+  const snap = await db.doc(`deliveries/${deliveryId}`).get()
+  if (!snap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
+  const d = snap.data()!
+  if (d.ownerEnrollmentId !== binding.enrollmentId) {
+    throw new HttpsError('permission-denied', 'Solo el propietario reserva archivos.')
+  }
+  if (!['not_started', 'in_progress'].includes(d.state as string)) {
+    throw new HttpsError('failed-precondition', 'La entrega no admite archivos en su estado actual.')
+  }
+  if (!ALLOWED_MIME.includes(contentType)) {
+    throw new HttpsError('invalid-argument', 'Tipo de archivo no permitido.')
+  }
+  if (!(Number.isFinite(sizeBytes) && sizeBytes > 0 && sizeBytes <= CONSTANTS.maxUploadBytes)) {
+    throw new HttpsError('invalid-argument', 'Tamaño de archivo no permitido.')
+  }
+  if (!/^[A-Za-z0-9._-]{1,80}$/.test(fileName)) {
+    throw new HttpsError('invalid-argument', 'Nombre de archivo inválido.')
+  }
+
+  const reservationId = newId()
+  const storagePath = `courses/${d.courseId}/enrollments/${binding.enrollmentId}/deliveries/${deliveryId}/uploads/${reservationId}/${fileName}`
+  const expiresAt = Timestamp.fromMillis(Date.now() + CONSTANTS.reservationMinutes * 60 * 1000)
+
+  await db.doc(`uploadReservations/${reservationId}`).set({
+    courseId: d.courseId,
+    enrollmentId: binding.enrollmentId,
+    deliveryId,
+    ownerEnrollmentId: binding.enrollmentId,
+    fileName,
+    contentType,
+    sizeBytes,
+    storagePath,
+    state: 'reserved',
+    createdBy: uid,
+    createdAt: Timestamp.now(),
+    expiresAt,
+  })
+
+  return { reservationId, path: storagePath, expiresAt: expiresAt.toMillis() }
+})
+
+/** Envío idempotente de evidencia digital (submit_key) + consumo de reserva opcional. */
 export const submitEvidence = onCall(async (request) => {
   const uid = assertSignedIn(request)
   const binding = await getActiveBinding(uid)
@@ -49,25 +107,44 @@ export const submitEvidence = onCall(async (request) => {
   const submitKey = String(request.data?.submitKey ?? '')
   const format = String(request.data?.format ?? 'text')
   const description = String(request.data?.description ?? '')
+  const reservationId = request.data?.reservationId ? String(request.data.reservationId) : null
   if (!deliveryId || !submitKey) throw new HttpsError('invalid-argument', 'deliveryId y submitKey son obligatorios.')
 
   return db.runTransaction(async (tx: Transaction) => {
     const deliveryRef = db.doc(`deliveries/${deliveryId}`)
     const evidenceRef = db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`)
+    const reservationRef = reservationId ? db.doc(`uploadReservations/${reservationId}`) : null
+
+    // Lecturas primero.
     const deliverySnap = await tx.get(deliveryRef)
     const evidenceSnap = await tx.get(evidenceRef)
+    const reservationSnap = reservationRef ? await tx.get(reservationRef) : null
 
     if (!deliverySnap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
     const d = deliverySnap.data()!
     if (d.ownerEnrollmentId !== binding.enrollmentId) {
       throw new HttpsError('permission-denied', 'Solo el propietario puede entregar.')
     }
-    // Idempotencia primero: el mismo submit_key devuelve el recibo anterior.
     if (evidenceSnap.exists) {
       return { evidenceId: submitKey, version: evidenceSnap.data()!.version as number, reused: true }
     }
     if (!['not_started', 'in_progress'].includes(d.state as string)) {
       throw new HttpsError('failed-precondition', 'La entrega no admite envíos en su estado actual.')
+    }
+
+    let storagePath: string | null = null
+    if (reservationRef) {
+      const r = reservationSnap?.data()
+      if (
+        !reservationSnap?.exists ||
+        !r ||
+        r.deliveryId !== deliveryId ||
+        r.ownerEnrollmentId !== binding.enrollmentId ||
+        r.state !== 'reserved'
+      ) {
+        throw new HttpsError('failed-precondition', 'Reserva de archivo inválida.')
+      }
+      storagePath = r.storagePath as string
     }
 
     const version = ((d.evidenceCount as number) ?? 0) + 1
@@ -78,6 +155,8 @@ export const submitEvidence = onCall(async (request) => {
       testModality: 'not_applicable',
       description,
       submitKey,
+      reservationId: reservationId ?? null,
+      storagePath,
       createdBy: uid,
       createdAt: Timestamp.now(),
       deletedAt: null,
@@ -88,6 +167,9 @@ export const submitEvidence = onCall(async (request) => {
       evidenceCount: version,
       updatedAt: Timestamp.now(),
     })
+    if (reservationRef) {
+      tx.update(reservationRef, { state: 'consumed', consumedAt: Timestamp.now() })
+    }
     return { evidenceId: submitKey, version, reused: false }
   })
 })

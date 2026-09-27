@@ -119,3 +119,37 @@ describe('Entregas · envío idempotente, equivalencia y validación', () => {
     await expect(validate({ deliveryId: `${IDS.s1}_${IDS.milestone1}`, assessments: [{ indicatorCode: 'D1', level: 'achieved' }, { indicatorCode: 'E1', level: 'achieved' }] })).rejects.toThrow()
   })
 })
+
+describe('Endurecimiento · reserva de archivos y docentes desactivados', () => {
+  it('reserveUpload crea una reserva que se consume al enviar evidencia', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
+    const { deliveryId } = (await start({ milestoneId: IDS.milestone1 })).data
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+    const r = await reserve({ deliveryId, fileName: 'guia.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    expect(r.data.path).toContain(r.data.reservationId)
+    expect((await adminDb.doc(`uploadReservations/${r.data.reservationId}`).get()).data()?.state).toBe('reserved')
+
+    const submit = httpsCallable<{ deliveryId: string; submitKey: string; format: string; description: string; reservationId: string }, { evidenceId: string }>(s.functions, 'submitEvidence')
+    await submit({ deliveryId, submitKey: 'rk1', format: 'file', description: 'x', reservationId: r.data.reservationId })
+    expect((await adminDb.doc(`uploadReservations/${r.data.reservationId}`).get()).data()?.state).toBe('consumed')
+  })
+
+  it('reserveUpload rechaza tipo y tamaño no permitidos', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
+    const { deliveryId } = (await start({ milestoneId: IDS.milestone1 })).data
+    const reserve = httpsCallable(s.functions, 'reserveUpload')
+    await expect(reserve({ deliveryId, fileName: 'a.exe', contentType: 'application/x-msdownload', sizeBytes: 10 })).rejects.toThrow()
+    await expect(reserve({ deliveryId, fileName: 'a.pdf', contentType: 'application/pdf', sizeBytes: 6 * 1024 * 1024 })).rejects.toThrow()
+  })
+
+  it('un docente desactivado no puede operar', async () => {
+    const t3 = await teacherClient(IDS.t3)
+    await expect(httpsCallable(t3.functions, 'revokeSession')({ enrollmentId: IDS.s1, reason: 'x' })).rejects.toThrow()
+    await expect(httpsCallable(t3.functions, 'regenerateCode')({ enrollmentId: IDS.s1 })).rejects.toThrow()
+    await expect(httpsCallable(t3.functions, 'validateMilestone')({ deliveryId: `${IDS.s1}_${IDS.milestone1}`, assessments: [{ indicatorCode: 'D1', level: 'achieved' }] })).rejects.toThrow()
+  })
+})
