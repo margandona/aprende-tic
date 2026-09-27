@@ -1,0 +1,97 @@
+[
+  {
+    "caso": "S1 ve sus entregas",
+    "actor": "Zorro-01",
+    "accion": "select delivery",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "S2 no ve entrega individual de S1",
+    "actor": "Puma-02",
+    "accion": "select delivery",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "S3 no ve entregas de otro curso",
+    "actor": "Condor-03",
+    "accion": "select delivery",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "T1 ve entregas de su curso",
+    "actor": "Docente Uno",
+    "accion": "select delivery",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "T2 no ve entregas de otro curso",
+    "actor": "Docente Dos",
+    "accion": "select delivery",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "S1 no ve evidencia/XP ajenos",
+    "actor": "Zorro-01",
+    "accion": "select evidence/xp",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "insert directo en delivery",
+    "actor": "Zorro-01",
+    "accion": "insert delivery",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "permission denied for table delivery"
+  },
+  {
+    "caso": "update directo de state",
+    "actor": "Zorro-01",
+    "accion": "update delivery.state='achieved'",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "permission denied for table delivery"
+  },
+  {
+    "caso": "insert directo en assessment",
+    "actor": "Zorro-01",
+    "accion": "insert assessment",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "permission denied for table assessment"
+  },
+  {
+    "caso": "S1 lee su encuesta",
+    "actor": "Zorro-01",
+    "accion": "select conditions_survey",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "T1 lee encuesta de su curso",
+    "actor": "Docente Uno",
+    "accion": "select conditions_survey",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "T2 no lee encuesta ajena",
+    "actor": "Docente Dos",
+    "accion": "select conditions_survey",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "S1 inserta encuesta de S2",
+    "actor": "Zorro-01",
+    "accion": "insert conditions_survey (ajena)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "new row violates row-level security policy for table \"conditions_survey\""
+  }
+]

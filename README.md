@@ -18,8 +18,11 @@ Este incremento sirve para validar, antes de construir identidad y datos:
 
 ## Ejecutar
 
+El proyecto está en la **raíz del repositorio** (no hay subcarpeta).
+
 ```bash
-cd red-tic-app
+git clone https://github.com/margandona/aprende-tic.git
+cd aprende-tic
 npm install
 npm run dev
 # abre http://localhost:4173
@@ -35,8 +38,29 @@ npm run dev
 | `npm run typecheck` | Chequeo de tipos (`vue-tsc`) |
 | `npm run lint` | ESLint |
 | `npm test` | Pruebas unitarias/componentes (Vitest) |
+| `npm run test:db` | Pruebas de integración SQL en PostgreSQL aislado (PGlite, sin Docker) |
 | `npm run e2e:install` | Descarga el navegador de Playwright (una vez) |
 | `npm run e2e` | Pruebas de 320 px, teclado, movimiento reducido y axe-core |
+
+## Base de datos (I0b)
+
+- Migraciones versionadas en `supabase/migrations/` (esquema, funciones, RLS y Storage).
+- Semilla **100 % sintética** en `supabase/seed.sql` (2 estudiantes del mismo curso, 1 de otro curso, 2 docentes).
+- Pruebas de integración en `tests-db/` sobre PostgreSQL aislado (PGlite), con shim de `auth`/`storage`.
+- Resultados permitido/denegado en `docs/i0b/matriz-*.json`; informe en `docs/I0b-RESULTADOS.md`.
+
+```bash
+npm run test:db
+```
+
+Con Docker disponible, la verificación equivalente en Supabase local:
+
+```bash
+npx supabase start
+npx supabase db reset
+```
+
+> I0b **no** declara RLS conforme ni habilita producción; sin datos reales ni credenciales.
 
 ## Códigos de demostración (fixtures)
 
@@ -78,12 +102,14 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - Respeto de `prefers-reduced-motion`.
 - `axe-core` reporta hallazgos automatizables; **no** se declara conformidad WCAG.
 
-## Fuera de alcance de I0a
+## Alcance
 
-- Sin Supabase ni políticas SQL (se abordarán en I1a, con las correcciones del documento maestro).
-- Sin autenticación real, sin subida de archivos, sin despliegue.
-- Las acciones de entrega/revisión aparecen deshabilitadas o en modo lectura.
+- **I0a:** interfaz local con fixtures, sin backend ni credenciales.
+- **I0b:** esquema SQL versionado, RLS, funciones y pruebas de integración en un entorno aislado con datos sintéticos. La app **aún no está conectada** a la base.
+- **Fuera de alcance todavía:** autenticación real en la app, subida de archivos, despliegue y datos de personas reales.
 
-## Qué falta para I0b
+## Informes
 
-Ver `docs/I0a-RESULTADOS.md`.
+- `docs/I0a-RESULTADOS.md` — interfaz, pruebas y ajustes cerrados.
+- `docs/I0b-RESULTADOS.md` — migraciones, correcciones SQL, matriz permitido/denegado y discrepancias.
+

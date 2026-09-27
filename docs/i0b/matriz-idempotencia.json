@@ -1,0 +1,58 @@
+[
+  {
+    "caso": "reenvío con misma clave",
+    "actor": "Zorro-01",
+    "accion": "submit_evidence x2 (misma clave)",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "una sola versión"
+  },
+  {
+    "caso": "envío con clave nueva en pending_review",
+    "actor": "Zorro-01",
+    "accion": "submit_evidence (clave nueva)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "la entrega no admite envíos en su estado actual"
+  },
+  {
+    "caso": "reintento tras ajuste",
+    "actor": "Zorro-01",
+    "accion": "reopen + submit_evidence (clave nueva)",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "nueva versión"
+  },
+  {
+    "caso": "validar dos veces",
+    "actor": "Docente Uno",
+    "accion": "validate_milestone x2",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "un solo xp_event"
+  },
+  {
+    "caso": "reinstaurar XP revocado",
+    "actor": "Docente Uno",
+    "accion": "revoke_xp + validate_milestone",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "misma fila"
+  },
+  {
+    "caso": "segundo xp_event",
+    "actor": "sistema",
+    "accion": "insert directo duplicado",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "viola UNIQUE"
+  },
+  {
+    "caso": "dos envíos misma clave nueva",
+    "actor": "Zorro-01",
+    "accion": "submit_evidence x2",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "sin duplicar (una sola conexión)"
+  }
+]

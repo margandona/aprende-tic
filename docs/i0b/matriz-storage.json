@@ -1,0 +1,60 @@
+[
+  {
+    "caso": "S1 lee objeto propio",
+    "actor": "Zorro-01",
+    "accion": "select storage.objects",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "ruta con curso ajeno",
+    "actor": "Zorro-01",
+    "accion": "select objeto (curso Y)",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "S3 no ve objetos de X",
+    "actor": "Condor-03",
+    "accion": "select storage.objects",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "T1 lee objeto de su curso",
+    "actor": "Docente Uno",
+    "accion": "select storage.objects",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "T2 no lee objeto ajeno",
+    "actor": "Docente Dos",
+    "accion": "select storage.objects",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "insert en ruta propia",
+    "actor": "Zorro-01",
+    "accion": "insert storage.objects",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "insert en ruta de otro curso",
+    "actor": "Zorro-01",
+    "accion": "insert storage.objects (curso Y)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "new row violates row-level security policy for table \"objects\""
+  },
+  {
+    "caso": "insert con matrícula ajena",
+    "actor": "Zorro-01",
+    "accion": "insert storage.objects (enrollment S2)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "new row violates row-level security policy for table \"objects\""
+  }
+]

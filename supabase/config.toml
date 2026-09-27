@@ -1,0 +1,27 @@
+# RED-TIC · configuración mínima para Supabase CLI (entorno local con Docker).
+# Requiere Docker. En este entorno no estaba disponible; las pruebas corren sobre
+# PostgreSQL aislado (PGlite/WASM) con el shim de tests-db/shim.sql.
+
+project_id = "aprende-tic"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[storage]
+enabled = true
+file_size_limit = "5MiB"
+
+[auth]
+enabled = true

@@ -1,0 +1,69 @@
+[
+  {
+    "caso": "canje válido",
+    "actor": "Zorro-01",
+    "accion": "redeem_code('ZORRO-01')",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "canje inválido",
+    "actor": "Zorro-01",
+    "accion": "redeem_code('NO-EXISTE')",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "status=invalid, intento registrado"
+  },
+  {
+    "caso": "revocar binding",
+    "actor": "Docente Uno",
+    "accion": "revoke_session",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "regenerar código",
+    "actor": "Docente Uno",
+    "accion": "regenerate_code",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "canje de código revocado",
+    "actor": "Zorro-01",
+    "accion": "redeem_code",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "status=revoked"
+  },
+  {
+    "caso": "límite de intentos",
+    "actor": "Zorro-01",
+    "accion": "11 canjes fallidos",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "status=rate_limited"
+  },
+  {
+    "caso": "segundo canje revoca el primero",
+    "actor": "otra sesión",
+    "accion": "redeem_code",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "docente de otro curso regenera",
+    "actor": "Docente Uno",
+    "accion": "regenerate_code (curso Y)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "no autorizado"
+  },
+  {
+    "caso": "canje con otra identidad",
+    "actor": "otra sesión",
+    "accion": "redeem_code('PUMA-02')",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  }
+]

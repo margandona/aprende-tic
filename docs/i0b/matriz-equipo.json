@@ -1,0 +1,53 @@
+[
+  {
+    "caso": "propietario accede",
+    "actor": "Zorro-01",
+    "accion": "select entrega de equipo",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "coautor accede",
+    "actor": "Puma-02",
+    "accion": "select entrega de equipo",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "tercero no accede",
+    "actor": "Condor-03",
+    "accion": "select entrega de equipo",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "validación por integrante",
+    "actor": "Docente Uno",
+    "accion": "validate_milestone (S1 y S2)",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "un xp_event por integrante"
+  },
+  {
+    "caso": "S1 no ve valoración de S2",
+    "actor": "Zorro-01",
+    "accion": "select assessment",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "T1 ve ambas valoraciones",
+    "actor": "Docente Uno",
+    "accion": "select assessment",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "validar a no-miembro",
+    "actor": "Docente Uno",
+    "accion": "validate_milestone (S3)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "la matrícula 30000000-0000-0000-0000-000000000003 no pertenece a la entrega"
+  }
+]
