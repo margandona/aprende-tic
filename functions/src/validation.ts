@@ -1,5 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import type { DocumentReference } from 'firebase-admin/firestore'
+import type { DocumentReference, QueryDocumentSnapshot } from 'firebase-admin/firestore'
 import {
   Timestamp,
   type Transaction,
@@ -76,7 +76,7 @@ export const validateMilestone = onCall(async (request) => {
     let teamMembers: string[] = []
     if (d.scope === 'team' && d.teamId) {
       const membersSnap = await tx.get(db.collection(`teams/${d.teamId}/members`))
-      teamMembers = membersSnap.docs.map((x) => x.id)
+      teamMembers = membersSnap.docs.map((x: QueryDocumentSnapshot) => x.id)
     }
 
     // Lecturas previas (valoraciones e XP existentes).
