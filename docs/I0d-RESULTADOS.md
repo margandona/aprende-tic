@@ -120,7 +120,8 @@ El comando `emu:test` ejecuta `firebase emulators:exec` con Auth, Firestore, Sto
 
 - `.github/workflows/ci.yml` — trabajos: `calidad` (lint, tipos, pruebas, build), `e2e` (Playwright + axe) y **`emuladores`** (instala Java 21, `npm ci`, `npm --prefix functions ci`, `npm run emu:test`).
 - El trabajo `db` (Supabase/PGlite) se retiró junto con `npm run test:db`.
-- Debe comprobarse la ejecución del nuevo commit tras publicarlo.
+- **Estado confirmado:** ejecución **`36349301159`** (commit `10d8f1b`): **success** (1 m 15 s), con las 22 pruebas de emuladores en verde.
+- Incidencias resueltas para que CI compilara: tipos explícitos de `Transaction`/`QueryDocumentSnapshot`, `moduleResolution: node16` en `functions`, y dependencias explícitas `@google-cloud/firestore`/`@google-cloud/storage` (en `firebase-admin` v14 son opcionales y no se instalaban en el runner).
 
 ---
 
