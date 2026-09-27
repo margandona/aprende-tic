@@ -7,6 +7,8 @@ const matrix: MatrixRow[] = []
 const KEY1 = '11111111-1111-1111-1111-111111111111'
 const KEY2 = '22222222-2222-2222-2222-222222222222'
 const KEY3 = '33333333-3333-3333-3333-333333333333'
+const KEY4 = '44444444-4444-4444-4444-444444444444'
+const KEY5 = '55555555-5555-5555-5555-555555555555'
 
 let db: PGlite
 let deliveryId: string
@@ -60,6 +62,9 @@ describe('Idempotencia y reinstauración de XP', () => {
     await asUser(db, T1_AUTH, () => q(db, 'select public.validate_milestone($1,$2,$3)', [deliveryId, payload, 'cierre']))
     const first = await asUser(db, T1_AUTH, () => q<{ id: string; xp_value: number }>(db, 'select id, xp_value from public.xp_event where student_enrollment_id=$1 and milestone_id=$2', [S1, M3]))
     expect(first.length).toBe(1)
+    // Reabrir, reenviar y revalidar: el XP no debe duplicarse.
+    await asUser(db, T1_AUTH, () => q(db, 'select public.reopen_milestone($1)', [deliveryId]))
+    await asUser(db, AUTH_S1, () => q(db, 'select public.submit_evidence($1,$2,$3,$4) as id', [deliveryId, KEY4, 'text', 'cuarta']))
     await asUser(db, T1_AUTH, () => q(db, 'select public.validate_milestone($1,$2,$3)', [deliveryId, payload, 'cierre']))
     const second = await asUser(db, T1_AUTH, () => q(db, 'select id from public.xp_event where student_enrollment_id=$1 and milestone_id=$2', [S1, M3]))
     expect(second.length).toBe(1)
@@ -73,7 +78,9 @@ describe('Idempotencia y reinstauración de XP', () => {
     const revoked = await asUser(db, T1_AUTH, () => q<{ revoked_at: string | null }>(db, 'select revoked_at from public.xp_event where id=$1', [ev[0].id]))
     expect(revoked[0].revoked_at).not.toBeNull()
 
-    const payload = JSON.stringify([{ indicator_id: E2_IND, level: 'developing', comment: 'ok' }])
+    const payload = JSON.stringify([{ indicator_id: E2_IND, level: 'developing', comment: 'ok' }, { indicator_id: E3_IND, level: 'achieved', comment: 'ok' }])
+    await asUser(db, T1_AUTH, () => q(db, 'select public.reopen_milestone($1)', [deliveryId]))
+    await asUser(db, AUTH_S1, () => q(db, 'select public.submit_evidence($1,$2,$3,$4) as id', [deliveryId, KEY5, 'text', 'quinta']))
     await asUser(db, T1_AUTH, () => q(db, 'select public.validate_milestone($1,$2,$3)', [deliveryId, payload, 'reinstaurar']))
     const reinstated = await asUser(db, T1_AUTH, () => q<{ id: string; revoked_at: string | null }>(db, 'select id, revoked_at from public.xp_event where student_enrollment_id=$1 and milestone_id=$2', [S1, M3]))
     expect(reinstated.length).toBe(1)

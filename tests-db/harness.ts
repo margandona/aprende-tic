@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite'
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,6 +20,10 @@ export async function createTestDb(): Promise<PGlite> {
   }
 
   await db.exec(readFileSync(join(ROOT, 'supabase', 'seed.sql'), 'utf8'))
+  const seedI0c = join(ROOT, 'tests-db', 'seed-i0c.sql')
+  if (existsSync(seedI0c)) {
+    await db.exec(readFileSync(seedI0c, 'utf8'))
+  }
   return db
 }
 

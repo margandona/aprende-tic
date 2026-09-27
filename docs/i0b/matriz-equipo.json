@@ -48,6 +48,6 @@
     "accion": "validate_milestone (S3)",
     "esperado": "denegado",
     "obtenido": "denegado",
-    "detalle": "la matrícula 30000000-0000-0000-0000-000000000003 no pertenece a la entrega"
+    "detalle": "la entrega no está en estado «por revisar»"
   }
 ]

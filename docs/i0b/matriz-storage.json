@@ -1,6 +1,6 @@
 [
   {
-    "caso": "S1 lee objeto propio",
+    "caso": "S1 lee objeto reservado propio",
     "actor": "Zorro-01",
     "accion": "select storage.objects",
     "esperado": "permitido",
@@ -10,6 +10,13 @@
     "caso": "ruta con curso ajeno",
     "actor": "Zorro-01",
     "accion": "select objeto (curso Y)",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "ruta con matrícula ajena",
+    "actor": "Zorro-01",
+    "accion": "select objeto (enrollment S2)",
     "esperado": "denegado",
     "obtenido": "denegado"
   },
@@ -35,7 +42,7 @@
     "obtenido": "denegado"
   },
   {
-    "caso": "insert en ruta propia",
+    "caso": "insert en ruta reservada",
     "actor": "Zorro-01",
     "accion": "insert storage.objects",
     "esperado": "permitido",

@@ -1,0 +1,173 @@
+[
+  {
+    "caso": "B1 bloqueo por credencial",
+    "actor": "Zorro-01",
+    "accion": "10 canjes con claves rotatorias",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "status=locked"
+  },
+  {
+    "caso": "B2 código de alta entropía",
+    "actor": "Docente Uno",
+    "accion": "regenerate_code",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "24 hex"
+  },
+  {
+    "caso": "B2 código caducado",
+    "actor": "Puma-02",
+    "accion": "redeem_code",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "status=expired"
+  },
+  {
+    "caso": "B2 pimiento cambia el hash",
+    "actor": "sistema",
+    "accion": "hash_code",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "sin pimiento no se reproduce"
+  },
+  {
+    "caso": "B3 hito ajeno",
+    "actor": "Docente Uno",
+    "accion": "register_equivalent_evidence (programa ajeno)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "el hito no pertenece al programa del curso"
+  },
+  {
+    "caso": "B3 versiones incrementales",
+    "actor": "Docente Uno",
+    "accion": "register_equivalent_evidence x2",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "v1, v2"
+  },
+  {
+    "caso": "B3 idempotencia equivalencia",
+    "actor": "Docente Uno",
+    "accion": "register_equivalent_evidence (misma clave)",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "mismo id"
+  },
+  {
+    "caso": "B4 coautor de otro curso",
+    "actor": "sistema",
+    "accion": "insert team_member (curso Y en equipo X)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "el integrante no pertenece al curso del equipo"
+  },
+  {
+    "caso": "B4 entrega con hito ajeno",
+    "actor": "sistema",
+    "accion": "insert delivery (programa ajeno)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "el hito no pertenece al programa del curso de la matrícula"
+  },
+  {
+    "caso": "B4 entrega con equipo ajeno",
+    "actor": "sistema",
+    "accion": "insert delivery (equipo de otro curso)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "el equipo no pertenece al curso de la matrícula"
+  },
+  {
+    "caso": "B5 tipo/tamaño",
+    "actor": "Zorro-01",
+    "accion": "reserve_evidence_upload inválido",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "B5 subir a ruta reservada",
+    "actor": "Zorro-01",
+    "accion": "insert storage.objects",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "B5 subir sin reserva",
+    "actor": "Zorro-01",
+    "accion": "insert storage.objects (no reservada)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "new row violates row-level security policy for table \"objects\""
+  },
+  {
+    "caso": "B5 reservar tras cierre",
+    "actor": "Zorro-01",
+    "accion": "reserve_evidence_upload (achieved)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "la entrega no admite archivos en su estado actual"
+  },
+  {
+    "caso": "B6 estado distinto de pending_review",
+    "actor": "Docente Uno",
+    "accion": "validate_milestone (achieved)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "la entrega no está en estado «por revisar»"
+  },
+  {
+    "caso": "B6 parciales/duplicados/ajenos",
+    "actor": "Docente Uno",
+    "accion": "validate_milestone",
+    "esperado": "denegado",
+    "obtenido": "denegado"
+  },
+  {
+    "caso": "B6 evidencia cruzada",
+    "actor": "Docente Uno",
+    "accion": "validate_milestone (evidencia ajena)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "la evidencia vigente no pertenece a la entrega"
+  },
+  {
+    "caso": "B6 validación completa",
+    "actor": "Docente Uno",
+    "accion": "validate_milestone (S1+S2, D1+E1)",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "B7 respuesta en borrador",
+    "actor": "Zorro-01",
+    "accion": "insert diagnosis_response (draft)",
+    "esperado": "permitido",
+    "obtenido": "permitido"
+  },
+  {
+    "caso": "B7 respuesta tras envío",
+    "actor": "Zorro-01",
+    "accion": "insert diagnosis_response (submitted)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "new row violates row-level security policy for table \"diagnosis_response\""
+  },
+  {
+    "caso": "B7 mutar intento enviado",
+    "actor": "Zorro-01",
+    "accion": "update diagnosis_attempt.status",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "permission denied for table diagnosis_attempt"
+  },
+  {
+    "caso": "B7 reenviar intento",
+    "actor": "Zorro-01",
+    "accion": "submit_diagnosis_attempt x2",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "el intento ya fue enviado"
+  }
+]

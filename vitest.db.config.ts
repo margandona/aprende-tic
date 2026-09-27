@@ -6,8 +6,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests-db/**/*.spec.ts'],
-    testTimeout: 60000,
-    hookTimeout: 60000,
+    testTimeout: 180000,
+    hookTimeout: 180000,
     pool: 'forks',
     fileParallelism: false,
   },

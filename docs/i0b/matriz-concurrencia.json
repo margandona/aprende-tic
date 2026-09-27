@@ -1,0 +1,42 @@
+[
+  {
+    "caso": "canjes concurrentes inválidos",
+    "actor": "Zorro-01 x2",
+    "accion": "redeem_code en paralelo",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "2 intentos contados (advisory lock)"
+  },
+  {
+    "caso": "envíos concurrentes misma clave",
+    "actor": "Zorro-01 x2",
+    "accion": "submit_evidence en paralelo",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "1 versión"
+  },
+  {
+    "caso": "validaciones concurrentes",
+    "actor": "Docente Uno x2",
+    "accion": "validate_milestone en paralelo",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "1 éxito, 1 rechazado; 1 xp_event"
+  },
+  {
+    "caso": "intentos concurrentes y bloqueo",
+    "actor": "Puma-02 x12",
+    "accion": "redeem_code en paralelo (revocado)",
+    "esperado": "denegado",
+    "obtenido": "denegado",
+    "detalle": "failed_attempts=12"
+  },
+  {
+    "caso": "canje válido concurrente",
+    "actor": "Zorro-01 x2",
+    "accion": "redeem_code en paralelo",
+    "esperado": "permitido",
+    "obtenido": "permitido",
+    "detalle": "1 binding activo"
+  }
+]

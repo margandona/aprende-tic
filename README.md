@@ -42,15 +42,15 @@ npm run dev
 | `npm run e2e:install` | Descarga el navegador de Playwright (una vez) |
 | `npm run e2e` | Pruebas de 320 px, teclado, movimiento reducido y axe-core |
 
-## Base de datos (I0b)
+## Base de datos (I0b / I0c)
 
-- Migraciones versionadas en `supabase/migrations/` (esquema, funciones, RLS y Storage).
-- Semilla **100 % sintética** en `supabase/seed.sql` (2 estudiantes del mismo curso, 1 de otro curso, 2 docentes).
-- Pruebas de integración en `tests-db/` sobre PostgreSQL aislado (PGlite), con shim de `auth`/`storage`.
-- Resultados permitido/denegado en `docs/i0b/matriz-*.json`; informe en `docs/I0b-RESULTADOS.md`.
+- Migraciones versionadas en `supabase/migrations/` (esquema, funciones, RLS, Storage y las correcciones de I0c en `20260927100000_i0c_fixes.sql`).
+- Semilla **100 % sintética** en `supabase/seed.sql`; datos de pruebas adversariales en `tests-db/seed-i0c.sql`.
+- Pruebas de integración en `tests-db/`: PGlite (una conexión) y **PostgreSQL nativo multiconexión** (`embedded-postgres`) para concurrencia.
+- Resultados permitido/denegado en `docs/i0b/matriz-*.json`; informes en `docs/I0b-RESULTADOS.md` y `docs/I0c-RESULTADOS.md`.
 
 ```bash
-npm run test:db
+npm run test:db        # 61 pruebas, incluye concurrencia multiconexión
 ```
 
 Con Docker disponible, la verificación equivalente en Supabase local:
@@ -60,7 +60,8 @@ npx supabase start
 npx supabase db reset
 ```
 
-> I0b **no** declara RLS conforme ni habilita producción; sin datos reales ni credenciales.
+> I0b/I0c **no** declaran RLS conforme ni habilitan producción; sin datos reales ni credenciales.
+> Auth anónimo y Storage API reales aún **no** se ejecutaron (requieren Supabase local con Docker).
 
 ## Códigos de demostración (fixtures)
 

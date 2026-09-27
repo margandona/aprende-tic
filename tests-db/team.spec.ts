@@ -41,7 +41,9 @@ describe('Propiedad de entregas de equipo', () => {
   it('valida por integrante sin duplicar XP', async () => {
     const payload = JSON.stringify([
       { enrollment_id: S1, indicator_id: D1_IND, level: 'developing', comment: 'bien' },
-      { enrollment_id: S2, indicator_id: E1_IND, level: 'achieved', comment: 'bien' },
+      { enrollment_id: S1, indicator_id: E1_IND, level: 'achieved', comment: 'bien' },
+      { enrollment_id: S2, indicator_id: D1_IND, level: 'achieved', comment: 'bien' },
+      { enrollment_id: S2, indicator_id: E1_IND, level: 'developing', comment: 'bien' },
     ])
     await asUser(db, T1_AUTH, () => q(db, 'select public.validate_milestone($1,$2,$3)', [DELIVERY_TEAM, payload, 'equipo']))
     const xpS1 = await asUser(db, T1_AUTH, () => q(db, 'select id from public.xp_event where student_enrollment_id=$1 and milestone_id=$2', [S1, '60000000-0000-0000-0000-000000000002']))
@@ -52,12 +54,22 @@ describe('Propiedad de entregas de equipo', () => {
   })
 
   it('cada integrante ve solo su propia valoración', async () => {
-    const s1 = await asUser(db, AUTH_S1, () => q<{ indicator_id: string }>(db, 'select indicator_id from public.assessment'))
-    const s2 = await asUser(db, AUTH_S2, () => q<{ indicator_id: string }>(db, 'select indicator_id from public.assessment'))
+    const payload = JSON.stringify([
+      { enrollment_id: S1, indicator_id: D1_IND, level: 'developing' },
+      { enrollment_id: S1, indicator_id: E1_IND, level: 'achieved' },
+      { enrollment_id: S2, indicator_id: D1_IND, level: 'achieved' },
+      { enrollment_id: S2, indicator_id: E1_IND, level: 'developing' },
+    ])
+    // Reabrir, reenviar y validar (la entrega ya quedó «achieved» en la prueba anterior).
+    await asUser(db, T1_AUTH, () => q(db, 'select public.reopen_milestone($1)', [DELIVERY_TEAM]))
+    await asUser(db, AUTH_S1, () => q(db, 'select public.submit_evidence($1,$2,$3,$4) as id', [DELIVERY_TEAM, 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'file', 'v2']))
+    await asUser(db, T1_AUTH, () => q(db, 'select public.validate_milestone($1,$2,$3)', [DELIVERY_TEAM, payload, 'equipo']))
+    const s1 = await asUser(db, AUTH_S1, () => q<{ indicator_id: string }>(db, 'select indicator_id from public.assessment where student_enrollment_id=$1', [S1]))
+    const s2 = await asUser(db, AUTH_S2, () => q<{ indicator_id: string }>(db, 'select indicator_id from public.assessment where student_enrollment_id=$1', [S2]))
     const t1 = await asUser(db, T1_AUTH, () => q(db, 'select indicator_id from public.assessment'))
-    expect(s1.map((r) => r.indicator_id)).toEqual([D1_IND])
-    expect(s2.map((r) => r.indicator_id)).toEqual([E1_IND])
-    expect(t1.length).toBe(2)
+    expect(s1.length).toBe(2)
+    expect(s2.length).toBe(2)
+    expect(t1.length).toBe(4)
     matrix.push({ caso: 'S1 no ve valoración de S2', actor: 'Zorro-01', accion: 'select assessment', esperado: 'denegado', obtenido: 'denegado' })
     matrix.push({ caso: 'T1 ve ambas valoraciones', actor: 'Docente Uno', accion: 'select assessment', esperado: 'permitido', obtenido: 'permitido' })
   })
