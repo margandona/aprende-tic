@@ -81,7 +81,7 @@ Además: **documentos de identidad y rol no escribibles desde el cliente** (`ses
 ## 4. CI
 
 - `.github/workflows/ci.yml` — trabajos `calidad`, `e2e` y **`emuladores`** (Java 21 + `npm --prefix functions ci` + `npm run emu:test`).
-- Ejecución a confirmar tras publicar este commit.
+- **Estado confirmado:** ejecución **`36350990620`** (commit `cfe433a`): **success** (1 m 19 s), con las **34 pruebas** de emuladores en verde.
 
 ---
 
