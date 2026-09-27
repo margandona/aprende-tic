@@ -1,0 +1,56 @@
+/* RED-TIC — design tokens (I0a). Tema propio, sin branding institucional. */
+:root {
+  /* Color */
+  --rt-primary: #115e59;
+  --rt-primary-strong: #134e4a;
+  --rt-primary-soft: #ccfbf1;
+  --rt-accent: #b45309;
+  --rt-accent-soft: #fef3c7;
+
+  --rt-bg: #f8fafc;
+  --rt-surface: #ffffff;
+  --rt-border: #cbd5e1;
+  --rt-text: #0f172a;
+  --rt-text-muted: #475569;
+
+  --rt-success: #15803d;
+  --rt-success-soft: #dcfce7;
+  --rt-warning: #b45309;
+  --rt-warning-soft: #fef3c7;
+  --rt-danger: #b91c1c;
+  --rt-danger-soft: #fee2e2;
+  --rt-info: #1d4ed8;
+  --rt-info-soft: #dbeafe;
+
+  --rt-focus: #0ea5e9;
+
+  /* Espaciado */
+  --rt-space-1: 4px;
+  --rt-space-2: 8px;
+  --rt-space-3: 12px;
+  --rt-space-4: 16px;
+  --rt-space-5: 24px;
+  --rt-space-6: 32px;
+
+  /* Tipografía */
+  --rt-font: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, sans-serif;
+  --rt-font-size-sm: 0.875rem; /* 14px */
+  --rt-font-size-base: 1rem; /* 16px */
+  --rt-font-size-lg: 1.125rem;
+  --rt-font-size-xl: 1.375rem;
+  --rt-font-size-2xl: 1.75rem;
+  --rt-line-height: 1.6;
+
+  /* Formas */
+  --rt-radius-sm: 6px;
+  --rt-radius-md: 12px;
+  --rt-radius-lg: 18px;
+  --rt-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  --rt-shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.12);
+
+  /* Tamaño táctil mínimo */
+  --rt-touch: 44px;
+
+  /* Layout */
+  --rt-nav-height: 64px;
+}
