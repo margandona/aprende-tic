@@ -83,9 +83,11 @@ Ninguna de las dos ejecuta **Auth anónimo real** ni **Storage API real**: eso r
 
 ## 6. Estado real de CI
 
-- `gh run list --repo margandona/aprende-tic` → ejecución **`36345200565`** sobre el commit de I0b (`099be78`): **success**, 54 s.
+- `gh run list --repo margandona/aprende-tic`:
+  - Commit de I0b (`099be78`) → ejecución **`36345200565`**: **success** (54 s).
+  - Commit de I0c (`f5e4825`) → ejecución **`36346250721`**: **success** (1 m 2 s).
 - El workflow `.github/workflows/ci.yml` tiene tres trabajos: `calidad` (lint, tipos, pruebas, build), `e2e` (Playwright + axe) y `db` (`npm run test:db`).
-- El trabajo `db` ahora incluye el archivo de concurrencia (PostgreSQL nativo). Debe comprobarse la ejecución del **nuevo commit** tras publicarlo.
+- El trabajo `db` incluye el archivo de concurrencia (PostgreSQL nativo), por lo que la ejecución `36346250721` confirma que las 61 pruebas —incluidas las 5 de concurrencia multiconexión— pasan también en el entorno de CI.
 
 ---
 
