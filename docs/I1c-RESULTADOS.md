@@ -95,7 +95,7 @@ En `src/data/diagnosisCase.ts` queda definida una **versión paralela** (`post`)
 ## 7. CI
 
 - `.github/workflows/ci.yml` — trabajos `calidad` (lint, tipos, pruebas, build) y **`emuladores`** (Java 21 + Chromium + `npm run emu:test`).
-- **Estado:** pendiente de confirmar la ejecución de este commit (I1c).
+- **Estado confirmado:** ejecución **`36358812766`** (commit `6670577`): **success** (2 m 19 s), con 50 pruebas de emulador y 19 de navegador en verde.
 
 ---
 
