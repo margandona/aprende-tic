@@ -64,7 +64,9 @@ Capturas: `docs/capturas/08-diagnostico.png` (diagnóstico enviado, solo lectura
 ## 5. CI
 
 - `.github/workflows/ci.yml` — trabajos `calidad` (lint, tipos, pruebas, build) y **`emuladores`** (Java 21 + Chromium + `npm run emu:test`).
-- **Estado:** pendiente de confirmar la ejecución de este commit (I1b).
+- **Estado confirmado:** ejecución **`36357246340`** (commit `3229e6b`): **success** (2 m 2 s), con 43 pruebas de emulador y 14 de navegador en verde.
+
+> La primera ejecución de I1b (`36356600301`) falló **solo** en el navegador: `.env.development` (con `VITE_USE_EMULATORS=true`) estaba **ignorado** por `.gitignore`, así que en CI la app arrancaba sin la bandera, la configuración **fallaba cerrado** y la página quedaba en blanco. Se versionó `.env.development` (solo el flag, sin secretos) y la ejecución quedó verde.
 
 ---
 
