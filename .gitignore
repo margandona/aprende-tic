@@ -10,3 +10,15 @@ test-results/
 .idea/
 .env
 .env.*
+!.env.example
+!functions/.env.example
+
+# Firebase
+functions/lib/
+functions/node_modules/
+.firebase/
+firebase-debug.log
+firestore-debug.log
+storage-debug.log
+ui-debug.log
+pubsub-debug.log

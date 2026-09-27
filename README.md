@@ -38,30 +38,23 @@ npm run dev
 | `npm run typecheck` | Chequeo de tipos (`vue-tsc`) |
 | `npm run lint` | ESLint |
 | `npm test` | Pruebas unitarias/componentes (Vitest) |
-| `npm run test:db` | Pruebas de integración SQL en PostgreSQL aislado (PGlite, sin Docker) |
 | `npm run e2e:install` | Descarga el navegador de Playwright (una vez) |
 | `npm run e2e` | Pruebas de 320 px, teclado, movimiento reducido y axe-core |
+| `npm run emu:test` | Firebase Emulator Suite: reglas, Functions, Storage y concurrencia |
+| `npm run emu:start` | Emuladores en modo interactivo |
 
-## Base de datos (I0b / I0c)
+## Backend (Firebase, I0d)
 
-- Migraciones versionadas en `supabase/migrations/` (esquema, funciones, RLS, Storage y las correcciones de I0c en `20260927100000_i0c_fixes.sql`).
-- Semilla **100 % sintética** en `supabase/seed.sql`; datos de pruebas adversariales en `tests-db/seed-i0c.sql`.
-- Pruebas de integración en `tests-db/`: PGlite (una conexión) y **PostgreSQL nativo multiconexión** (`embedded-postgres`) para concurrencia.
-- Resultados permitido/denegado en `docs/i0b/matriz-*.json`; informes en `docs/I0b-RESULTADOS.md` y `docs/I0c-RESULTADOS.md`.
-
-```bash
-npm run test:db        # 61 pruebas, incluye concurrencia multiconexión
-```
-
-Con Docker disponible, la verificación equivalente en Supabase local:
+- **Decisión vigente:** Firebase (Auth, Firestore, Storage, Functions, Hosting). El SQL de Supabase queda como **histórico** en `docs/archivo-supabase/` (**no ejecutar**).
+- Reglas: `firestore.rules`, `storage.rules`; índices: `firestore.indexes.json`.
+- Functions en `functions/`; pruebas con emuladores en `tests-emu/`.
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informe: `docs/I0d-RESULTADOS.md`.
 
 ```bash
-npx supabase start
-npx supabase db reset
+npm run emu:test        # 22 pruebas con Auth, Firestore, Storage y Functions
 ```
 
-> I0b/I0c **no** declaran RLS conforme ni habilitan producción; sin datos reales ni credenciales.
-> Auth anónimo y Storage API reales aún **no** se ejecutaron (requieren Supabase local con Docker).
+> I0d usa solo el proyecto `demo-red-tic` y datos sintéticos. **No** conecta el frontend a registros reales todavía (eso es I1a) y **no** habilita producción.
 
 ## Códigos de demostración (fixtures)
 
@@ -106,11 +99,14 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 ## Alcance
 
 - **I0a:** interfaz local con fixtures, sin backend ni credenciales.
-- **I0b:** esquema SQL versionado, RLS, funciones y pruebas de integración en un entorno aislado con datos sintéticos. La app **aún no está conectada** a la base.
-- **Fuera de alcance todavía:** autenticación real en la app, subida de archivos, despliegue y datos de personas reales.
+- **I0b / I0c:** esquema SQL y pruebas PostgreSQL → **archivados** en `docs/archivo-supabase/` (sustituidos por Firebase).
+- **I0d:** backend Firebase (Auth, Firestore, Storage, Functions) probado con Emulator Suite. La app **aún no está conectada** a registros reales.
+- **Fuera de alcance todavía (I1a):** conexión del frontend a Auth/lecturas Firebase, proveedor institucional docente, App Check, despliegue y datos de personas reales.
 
 ## Informes
 
 - `docs/I0a-RESULTADOS.md` — interfaz, pruebas y ajustes cerrados.
-- `docs/I0b-RESULTADOS.md` — migraciones, correcciones SQL, matriz permitido/denegado y discrepancias.
+- `docs/I0b-RESULTADOS.md` / `docs/I0c-RESULTADOS.md` — histórico Supabase (archivado).
+- `docs/I0d-RESULTADOS.md` — backend Firebase, matriz permitido/denegado y pendientes.
+- `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.
 

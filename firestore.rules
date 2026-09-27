@@ -1,0 +1,156 @@
+rules_version = '2';
+
+// RED-TIC · Firestore Security Rules (I0d)
+// - El cliente solo LEE lo permitido por rol/curso; las escrituras sensibles pasan por Functions.
+// - Cada operación protegida consulta el vínculo activo (sessionBindings/{authUid}).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function signedIn() {
+      return request.auth != null;
+    }
+    function bindingPath() {
+      return /databases/$(database)/documents/sessionBindings/$(request.auth.uid);
+    }
+    function binding() {
+      return get(bindingPath()).data;
+    }
+    function activeBinding() {
+      return signedIn()
+        && exists(bindingPath())
+        && binding().state == 'active'
+        && binding().expiresAt > request.time;
+    }
+    function myEnrollmentId() {
+      return activeBinding() ? binding().enrollmentId : 'none';
+    }
+    function myCourseId() {
+      return activeBinding() ? binding().courseId : 'none';
+    }
+    function isTeacherOfCourse(courseId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/teacherCourses/$(request.auth.uid + '_' + courseId));
+    }
+    function delivery(deliveryId) {
+      return get(/databases/$(database)/documents/deliveries/$(deliveryId)).data;
+    }
+    function isTeamMember(deliveryId) {
+      let d = delivery(deliveryId);
+      return d.teamId != null
+        && exists(/databases/$(database)/documents/teams/$(d.teamId)/members/$(myEnrollmentId()));
+    }
+    function canAccessDelivery(deliveryId) {
+      let d = delivery(deliveryId);
+      return d.ownerEnrollmentId == myEnrollmentId()
+        || isTeamMember(deliveryId)
+        || isTeacherOfCourse(d.courseId);
+    }
+
+    // ── Catálogo (lectura para sesiones autenticadas) ────────────────────
+    match /institutions/{id} { allow read: if signedIn(); allow write: if false; }
+    match /programVersions/{id} { allow read: if signedIn(); allow write: if false; }
+    match /courses/{id} { allow read: if signedIn(); allow write: if false; }
+    match /missions/{id} { allow read: if signedIn(); allow write: if false; }
+    match /milestones/{id} { allow read: if signedIn(); allow write: if false; }
+    match /indicators/{id} { allow read: if signedIn(); allow write: if false; }
+    match /badges/{id} { allow read: if signedIn(); allow write: if false; }
+
+    // ── Identidad ────────────────────────────────────────────────────────
+    // Credenciales: nunca accesibles desde el cliente (solo Functions).
+    match /codeCredentials/{codeHash} { allow read, write: if false; }
+    // Binding: el estudiante ve el suyo; escritura solo por Functions.
+    match /sessionBindings/{authUid} {
+      allow read: if signedIn() && request.auth.uid == authUid;
+      allow write: if false;
+    }
+    match /enrollments/{enrollmentId} {
+      allow read: if (activeBinding() && enrollmentId == myEnrollmentId())
+        || isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+    }
+    match /teachers/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /teacherCourses/{docId} {
+      allow read: if signedIn() && resource.data.teacherUid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // ── Equipos ──────────────────────────────────────────────────────────
+    match /teams/{teamId} {
+      allow read: if signedIn();
+      allow write: if false;
+      match /members/{enrollmentId} {
+        allow read: if signedIn();
+        allow write: if false;
+      }
+    }
+
+    // ── Entregas y evidencias (lectura por rol/curso; escritura por Functions) ─
+    match /deliveries/{deliveryId} {
+      allow read: if canAccessDelivery(deliveryId);
+      allow write: if false;
+
+      match /evidence/{evidenceId} {
+        allow read: if canAccessDelivery(deliveryId);
+        allow write: if false;
+      }
+      match /contributors/{enrollmentId} {
+        allow read: if canAccessDelivery(deliveryId);
+        allow write: if false;
+      }
+    }
+
+    // ── Evaluación y gamificación ────────────────────────────────────────
+    match /assessments/{assessmentId} {
+      allow read: if (activeBinding() && resource.data.enrollmentId == myEnrollmentId())
+        || isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+    }
+    match /assessmentHistory/{id} {
+      allow read: if (activeBinding() && resource.data.enrollmentId == myEnrollmentId())
+        || isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+    }
+    match /xpEvents/{id} {
+      allow read: if (activeBinding() && resource.data.enrollmentId == myEnrollmentId())
+        || isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+    }
+    match /badgeAwards/{id} {
+      allow read: if (activeBinding() && resource.data.enrollmentId == myEnrollmentId())
+        || isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+    }
+
+    // ── Diagnóstico (inmutable tras el envío; escritura por Functions) ────
+    match /diagnosisAttempts/{attemptId} {
+      allow read: if (activeBinding() && resource.data.enrollmentId == myEnrollmentId())
+        || isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+      match /responses/{taskCode} {
+        allow read: if activeBinding()
+          && get(/databases/$(database)/documents/diagnosisAttempts/$(attemptId)).data.enrollmentId == myEnrollmentId();
+        allow write: if false;
+      }
+    }
+
+    // ── Encuesta de condiciones (sensible) ───────────────────────────────
+    match /conditionsSurveys/{enrollmentId} {
+      // El estudiante puede crear la suya; solo el docente del curso puede leerla.
+      allow read: if isTeacherOfCourse(resource.data.courseId);
+      allow create: if activeBinding() && request.resource.data.enrollmentId == myEnrollmentId()
+        && request.resource.data.courseId == myCourseId();
+      allow update, delete: if false;
+    }
+
+    // ── Internos (solo Functions) ────────────────────────────────────────
+    match /redeemAttempts/{id} { allow read, write: if false; }
+    match /auditLogs/{id} { allow read, write: if false; }
+
+    // Por defecto, denegar.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

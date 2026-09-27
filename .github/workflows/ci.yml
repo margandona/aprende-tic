@@ -51,8 +51,8 @@ jobs:
           path: docs/accesibilidad/axe-report.json
           if-no-files-found: ignore
 
-  db:
-    name: Pruebas de integración de base de datos (aislado, datos sintéticos)
+  emuladores:
+    name: Firebase Emulator Suite (reglas, functions, Storage, concurrencia)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +60,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - run: npm ci
-      - name: Pruebas de integración SQL
-        run: npm run test:db
+      - name: Dependencias de Functions
+        run: npm --prefix functions ci
+      - name: Pruebas con emuladores (Auth, Firestore, Storage, Functions)
+        run: npm run emu:test

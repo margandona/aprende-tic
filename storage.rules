@@ -1,0 +1,62 @@
+rules_version = '2';
+
+// RED-TIC · Storage Security Rules (I0d)
+// Ruta: courses/{courseId}/enrollments/{enrollmentId}/deliveries/{deliveryId}/uploads/{reservationId}/{fileName}
+// Comprueba: autenticación, vínculo activo, curso, matrícula, estado de la entrega y tipo/tamaño.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function binding() {
+      return firestore.get(/databases/(default)/documents/sessionBindings/$(request.auth.uid)).data;
+    }
+    function activeBinding() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/sessionBindings/$(request.auth.uid))
+        && binding() != null
+        && binding().state == 'active'
+        && binding().expiresAt > request.time;
+    }
+    function delivery(deliveryId) {
+      return firestore.get(/databases/(default)/documents/deliveries/$(deliveryId)).data;
+    }
+    function teacherOf(courseId) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/teacherCourses/$(request.auth.uid + '_' + courseId));
+    }
+    function allowedType() {
+      return request.resource.contentType == 'text/plain'
+        || request.resource.contentType == 'application/pdf'
+        || request.resource.contentType == 'image/png'
+        || request.resource.contentType == 'image/jpeg'
+        || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+
+    match /courses/{courseId}/enrollments/{enrollmentId}/deliveries/{deliveryId}/uploads/{reservationId}/{fileName} {
+      allow read: if (
+        (
+          activeBinding()
+          && binding().enrollmentId == enrollmentId
+          && delivery(deliveryId) != null
+          && delivery(deliveryId).ownerEnrollmentId == enrollmentId
+        )
+        || teacherOf(courseId)
+      );
+
+      allow create: if activeBinding()
+        && binding().enrollmentId == enrollmentId
+        && binding().courseId == courseId
+        && delivery(deliveryId) != null
+        && delivery(deliveryId).courseId == courseId
+        && delivery(deliveryId).ownerEnrollmentId == enrollmentId
+        && delivery(deliveryId).state in ['not_started', 'in_progress']
+        && request.resource.size < 5 * 1024 * 1024
+        && allowedType();
+
+      allow update, delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
