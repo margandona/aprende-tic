@@ -36,11 +36,12 @@ test('axe-core: hallazgos automatizables en pantallas base', async ({ page }) =>
 
   writeFileSync(`${OUT}/axe-report.json`, JSON.stringify(report, null, 2))
 
-  const critical = Object.entries(report).flatMap(([screen, violations]) =>
-    (violations as { impact: string | null; id: string }[])
-      .filter((v) => v.impact === 'critical')
-      .map((v) => `${screen}: ${v.id}`),
+  // La prueba falla ante CUALQUIER infracción automatizable en estas pantallas.
+  const allViolations = Object.entries(report).flatMap(([screen, violations]) =>
+    (violations as { impact: string | null; id: string }[]).map(
+      (v) => `${screen}: ${v.id} (${v.impact ?? 'sin impacto'})`,
+    ),
   )
 
-  expect(critical, `Violaciones críticas: ${critical.join(', ')}`).toEqual([])
+  expect(allViolations, `Infracciones automatizables: ${allViolations.join(', ')}`).toEqual([])
 })

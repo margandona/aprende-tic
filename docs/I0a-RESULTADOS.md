@@ -7,8 +7,11 @@
 
 ## 1. Cómo ejecutar
 
+El proyecto está en la **raíz del repositorio** (no hay subcarpeta).
+
 ```bash
-cd red-tic-app
+git clone https://github.com/margandona/aprende-tic.git
+cd aprende-tic
 npm install
 npm run dev        # http://localhost:4173
 ```

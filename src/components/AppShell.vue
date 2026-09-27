@@ -25,7 +25,7 @@ function salir(): void {
         <span class="shell__logo" aria-hidden="true">🌐</span>
         <span>
           <strong>RED-TIC</strong>
-          <span class="shell__subtitle">Red de soluciones digitales</span>
+          <span class="shell__subtitle">Aprende, crea y aporta a tu comunidad</span>
         </span>
       </div>
       <div class="shell__actions">

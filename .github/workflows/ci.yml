@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  calidad:
+    name: Lint, tipos, pruebas y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Tipos
+        run: npm run typecheck
+      - name: Pruebas unitarias/componentes
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: Playwright + axe (320 px, teclado, movimiento reducido)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Pruebas de navegador
+        run: npm run e2e
+      - name: Guardar reporte axe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: axe-report
+          path: docs/accesibilidad/axe-report.json
+          if-no-files-found: ignore
+
+  db:
+    name: Pruebas de integración de base de datos (aislado, datos sintéticos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Pruebas de integración SQL
+        run: npm run test:db
