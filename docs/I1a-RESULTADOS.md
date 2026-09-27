@@ -67,7 +67,7 @@ npm run emu:start       # emuladores + app en modo interactivo
 ## 5. CI
 
 - `.github/workflows/ci.yml` — trabajos `calidad` (lint, tipos, pruebas, build) y **`emuladores`** (Java 21 + Chromium + `npm run emu:test`, que ejecuta Vitest y Playwright con emuladores).
-- Ejecución a confirmar tras publicar este commit.
+- **Estado confirmado:** ejecución **`36354124007`** (commit `a8881d7`): **success** (2 m 8 s), con 40 pruebas de emulador y 10 de navegador en verde.
 
 ---
 
