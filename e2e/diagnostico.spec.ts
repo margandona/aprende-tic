@@ -104,7 +104,8 @@ test.describe('I1b/I1c · diagnóstico en la interfaz', () => {
       .get()
     for (const d of bindings.docs) await d.ref.update({ state: 'revoked' })
 
-    await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Misiones' }).click()
+    // Al volver el foco, la revalidación detecta la revocación y cierra la sesión.
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await expect(page.getByRole('heading', { name: 'Entrar a RED-TIC' })).toBeVisible()
   })
 })

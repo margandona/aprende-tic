@@ -255,6 +255,10 @@ describe('Storage Rules · reserva real de archivos', () => {
     await assertFails(up(U.s1, path(IDS.courseX, IDS.s1, D, RES.wrongSize, 'guia.txt'), 3, 'text/plain'))
   })
 
+  it('deniega si el MIME no coincide con la reserva', async () => {
+    await assertFails(up(U.s1, path(IDS.courseX, IDS.s1, D, RES.valid, 'guia.txt'), 3, 'application/pdf'))
+  })
+
   it('deniega curso ajeno o matrícula ajena', async () => {
     await assertFails(up(U.s1, path(IDS.courseY, IDS.s1, D, RES.valid, 'guia.txt'), 3, 'text/plain'))
     await assertFails(up(U.s3, path(IDS.courseX, IDS.s1, D, RES.valid, 'guia.txt'), 3, 'text/plain'))

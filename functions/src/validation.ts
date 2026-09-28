@@ -160,7 +160,14 @@ export const validateMilestone = onCall(async (request) => {
         revokedAt: null,
       })
     }
-    tx.update(deliveryRef, { state: 'achieved', adjustment: null, updatedAt: Timestamp.now() })
+    tx.update(deliveryRef, {
+      state: 'achieved',
+      adjustment: null,
+      // El XP acredita el hito (avance narrativo). Si ningún indicador se observó,
+      // la competencia queda «No evaluado», nunca 0.
+      competenceObserved: input.some((a) => a.level !== 'not_evaluated'),
+      updatedAt: Timestamp.now(),
+    })
 
     return { status: 'achieved', assessments: input.length }
   })
@@ -212,14 +219,45 @@ export const revokeXp = onCall(async (request) => {
   return { status: 'ok' }
 })
 
+/**
+ * Reapertura docente segura de una entrega ya revisada.
+ * Solo desde `pending_review` (ajuste) o `achieved` (corrección): pasa a `in_progress`,
+ * registra el historial y, si se indica, la acción para el estudiante. No reinicia XP.
+ */
 export const reopenMilestone = onCall(async (request) => {
   const uid = assertSignedIn(request)
   const deliveryId = String(request.data?.deliveryId ?? '')
+  const action = String(request.data?.action ?? '').trim().slice(0, 500)
+
   const ref = db.doc(`deliveries/${deliveryId}`)
-  const snap = await ref.get()
-  if (!snap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
-  await assertTeacherOfCourse(uid, snap.data()!.courseId as string)
-  await ref.update({ state: 'in_progress', updatedAt: Timestamp.now() })
+  const head = await ref.get()
+  if (!head.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
+  await assertTeacherOfCourse(uid, head.data()!.courseId as string)
+
+  await db.runTransaction(async (tx: Transaction) => {
+    const snap = await tx.get(ref)
+    const d = snap.data()!
+    if (d.state !== 'pending_review' && d.state !== 'achieved') {
+      throw new HttpsError('failed-precondition', 'Solo se reabre una entrega «por revisar» o «lograda».')
+    }
+    const update: { state: string; updatedAt: Timestamp; adjustment?: { action: string; by: string; at: Timestamp } } = {
+      state: 'in_progress',
+      updatedAt: Timestamp.now(),
+    }
+    if (action) update.adjustment = { action, by: uid, at: Timestamp.now() }
+    tx.update(ref, update)
+    tx.set(db.collection('deliveryHistory').doc(), {
+      deliveryId,
+      courseId: d.courseId,
+      ownerEnrollmentId: d.ownerEnrollmentId,
+      milestoneId: d.milestoneId,
+      kind: 'reopen',
+      action,
+      changedBy: uid,
+      changedAt: Timestamp.now(),
+    })
+  })
+  await audit(uid, 'teacher', 'reopen_milestone', 'delivery', deliveryId, { action })
   return { status: 'ok' }
 })
 

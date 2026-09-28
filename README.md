@@ -53,11 +53,12 @@ npm run dev
 - **I1c:** instrumento completo (caso de la biblioteca, fichas A/B, mensaje simulado), encuesta múltiple/opcional, transiciones cerradas y **vista docente mínima** con revisión, puntaje nulo e historial.
 - **I2a:** **misión 2 «Escuchar la señal»** funcional con entrega de **texto** (inicio, borrador local, envío idempotente, versiones, reintento y confirmación) y **lectura docente de entregas pendientes** (sin valoración ni XP). El **postest** no puede iniciarse ni enviarse; el **registro equivalente en papel** queda documentado para I2b.
 - **I2b:** **revisión docente accionable** de la misión 2 (valoración por indicador, «no evaluado» separado, fortaleza/siguiente paso), **validación con XP único**, **pedir ajuste** y reintento, **entrega equivalente** (papel/audio/maqueta/dictado/adaptación) y **plantilla imprimible**.
-- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`, `docs/I2b-RESULTADOS.md`.
+- **I2c:** **reapertura segura** y regla de **«no evaluado»** (XP narrativo vs competencia), y **subida de archivos** en la misión 2 (`reserveUpload` + Storage + `submitEvidence` con verificación real, progreso y limpieza de huérfanos).
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`, `docs/I2b-RESULTADOS.md`, `docs/I2c-RESULTADOS.md`.
 
 ```bash
-npm run emu:test        # 65 pruebas de emulador + 30 de navegador
-npm run emu:start       # emuladores en modo interactivo
+npm run emu:test        # 72 pruebas de emulador + 33 de navegador
+npm run emu:start       # emuladores + app en modo interactivo
 ```
 
 > Solo proyecto `demo-red-tic` y datos sintéticos. **No** se despliega ni se usan datos reales.
@@ -112,7 +113,8 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - **I1c:** instrumento completo con estímulos (caso, fichas A/B, mensaje simulado), encuesta múltiple/opcional, corrección antes del envío, envío inmutable y **vista docente mínima** (revisión, puntaje nulo e historial).
 - **I2a:** misión 2 funcional con entrega de texto (inicio, borrador, envío idempotente y versiones) y lectura docente de entregas pendientes; valoración y XP quedan para I2b.
 - **I2b:** revisión docente con valoración por indicador y XP único, pedir ajuste/reintento, entrega equivalente (papel/audio/maqueta/dictado/adaptación) y plantilla imprimible.
-- **Fuera de alcance todavía:** subida de archivos (I2c), App Check exigido, proveedor institucional docente, retención/consentimiento, despliegue y datos reales.
+- **I2c:** reapertura segura, regla de «no evaluado» (XP narrativo vs competencia) y subida de archivos en la misión 2 con reserva, verificación y limpieza de huérfanos.
+- **Fuera de alcance todavía:** otras misiones, App Check exigido, proveedor institucional docente, retención/consentimiento, despliegue y datos reales.
 
 ## Informes
 
@@ -125,6 +127,8 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - `docs/I1c-RESULTADOS.md` — instrumento completo, transiciones cerradas y vista docente mínima.
 - `docs/I2a-RESULTADOS.md` — primera misión funcional con entrega de texto y lectura docente.
 - `docs/I2b-RESULTADOS.md` — revisión docente, XP único, ajuste/reintento y entrega equivalente.
+- `docs/I2c-RESULTADOS.md` — reapertura segura, regla de «no evaluado» y subida de archivos.
+- `docs/I2c-COSTOS-Y-RETENCION.md` — costos/cuotas estimados y retención propuesta.
 - `docs/I2a-ENTREGA-EQUIVALENTE-PAPEL.md` — procedimiento de entrega equivalente (papel/audio).
 - `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.
 

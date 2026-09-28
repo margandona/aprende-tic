@@ -2,7 +2,15 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAsync } from '../composables/useAsync'
-import { fetchMissionDetail, startMission, submitTextEvidence } from '../data/firebaseRepository'
+import {
+  evidenceDownloadUrl,
+  fetchMissionDetail,
+  reserveUpload,
+  startMission,
+  submitFileEvidence,
+  submitTextEvidence,
+  uploadEvidenceFile,
+} from '../data/firebaseRepository'
 import { clearDraft, loadDraft, saveDraft } from '../data/drafts'
 import { demo, refreshSession, session } from '../stores/session'
 import { missionStateLabels } from '../utils/labels'
@@ -23,7 +31,21 @@ const versions = computed(() => data.value?.versions ?? [])
 const state = computed(() => progress.value?.state ?? 'not_started')
 const editable = computed(() => state.value === 'not_started' || state.value === 'in_progress')
 
+// Formatos de archivo admitidos (deben coincidir con Storage Rules y Functions).
+const ALLOWED_TYPES = [
+  'text/plain',
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]
+const MAX_BYTES = 5 * 1024 * 1024
+
 const draftText = ref('')
+const mode = ref<'text' | 'file'>('text')
+const file = ref<File | null>(null)
+const fileError = ref('')
+const uploadPercent = ref(0)
 const busy = ref(false)
 const message = ref('')
 const submitError = ref('')
@@ -62,6 +84,85 @@ function borrarBorrador(): void {
   clearDraft(session.binding.enrollmentId, milestone.value.id)
   draftText.value = ''
   message.value = 'Borrador local borrado.'
+}
+
+function onFile(event: Event): void {
+  fileError.value = ''
+  submitError.value = ''
+  const f = (event.target as HTMLInputElement).files?.[0] ?? null
+  if (!f) {
+    file.value = null
+    return
+  }
+  if (!ALLOWED_TYPES.includes(f.type)) {
+    file.value = null
+    fileError.value = 'Tipo de archivo no permitido (texto, PDF, PNG, JPG o DOCX).'
+    return
+  }
+  if (f.size > MAX_BYTES) {
+    file.value = null
+    fileError.value = 'El archivo supera el máximo de 5 MB.'
+    return
+  }
+  file.value = f
+}
+
+async function enviarArchivo(): Promise<void> {
+  if (!milestone.value || !session.binding || !file.value) {
+    if (!file.value) submitError.value = 'Selecciona un archivo antes de enviar.'
+    return
+  }
+  busy.value = true
+  submitError.value = ''
+  message.value = ''
+  uploadPercent.value = 0
+  try {
+    await refreshSession()
+    if (!session.binding) {
+      submitError.value = 'Tu sesión ya no está activa. Vuelve a entrar con tu código.'
+      return
+    }
+    let deliveryId = data.value?.deliveryId ?? null
+    if (!deliveryId) deliveryId = await startMission(milestone.value.id)
+    if (!submitKey.value) submitKey.value = crypto.randomUUID()
+
+    // 1) Reserva con caducidad (ruta ligada a curso/matrícula/entrega).
+    const reservation = await reserveUpload({
+      deliveryId,
+      fileName: file.value.name,
+      contentType: file.value.type,
+      sizeBytes: file.value.size,
+    })
+    // 2) Subida a Storage con progreso.
+    await uploadEvidenceFile(reservation.path, file.value, (p) => {
+      uploadPercent.value = p
+    })
+    // 3) Confirmación solo tras verificar el objeto real en el servidor.
+    const result = await submitFileEvidence({
+      deliveryId,
+      submitKey: submitKey.value,
+      description: file.value.name,
+      reservationId: reservation.reservationId,
+    })
+    submitKey.value = null
+    confirmation.value = { version: result.version, reused: result.reused, evidenceId: result.evidenceId }
+    message.value = 'Archivo registrado y verificado por el servidor.'
+    file.value = null
+    uploadPercent.value = 0
+    await reload()
+  } catch {
+    submitError.value = 'No se pudo subir o registrar el archivo. Puedes reintentar.'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function verArchivo(path: string): Promise<void> {
+  try {
+    window.open(await evidenceDownloadUrl(path), '_blank', 'noopener')
+  } catch {
+    /* sin acceso al archivo */
+  }
 }
 
 async function iniciar(): Promise<void> {
@@ -167,10 +268,10 @@ async function enviar(): Promise<void> {
 
       <!-- Editor (solo mientras está en borrador) -->
       <div v-if="editable" class="card">
-        <h2>Tu entrega (texto)</h2>
+        <h2>Tu entrega</h2>
         <p class="hint">
-          Escribe tu ficha de necesidad con evidencias y fuentes revisadas. No incluyas contraseñas ni datos
-          personales.
+          No incluyas contraseñas ni datos personales. Puedes entregar texto o un archivo (mismo criterio de
+          acreditación).
         </p>
 
         <div v-if="!data?.deliveryId" class="actions">
@@ -178,23 +279,55 @@ async function enviar(): Promise<void> {
         </div>
 
         <template v-else>
-          <label for="entrega-texto">Texto de la entrega</label>
-          <textarea id="entrega-texto" v-model="draftText" class="input" rows="6" :disabled="busy" />
+          <fieldset class="mode" :disabled="busy">
+            <legend>Formato de entrega</legend>
+            <label><input v-model="mode" type="radio" value="text" /> Texto</label>
+            <label><input v-model="mode" type="radio" value="file" /> Archivo</label>
+          </fieldset>
 
           <p v-if="submitError" class="error" role="alert">{{ submitError }}</p>
 
-          <div class="actions">
-            <button type="button" class="btn btn--secondary" :disabled="busy" @click="guardarBorrador">
-              Guardar borrador
-            </button>
-            <button type="button" class="btn btn--secondary" :disabled="busy" @click="borrarBorrador">
-              Borrar borrador local
-            </button>
-            <button type="button" class="btn btn--primary" :disabled="busy" @click="enviar">
-              {{ submitError ? 'Reintentar envío' : 'Enviar entrega' }}
-            </button>
-          </div>
-          <p class="hint">El borrador se guarda solo en este dispositivo hasta que envíes.</p>
+          <!-- Texto -->
+          <template v-if="mode === 'text'">
+            <label for="entrega-texto">Texto de la entrega</label>
+            <textarea id="entrega-texto" v-model="draftText" class="input" rows="6" :disabled="busy" />
+            <div class="actions">
+              <button type="button" class="btn btn--secondary" :disabled="busy" @click="guardarBorrador">
+                Guardar borrador
+              </button>
+              <button type="button" class="btn btn--secondary" :disabled="busy" @click="borrarBorrador">
+                Borrar borrador local
+              </button>
+              <button type="button" class="btn btn--primary" :disabled="busy" @click="enviar">
+                {{ submitError ? 'Reintentar envío' : 'Enviar entrega' }}
+              </button>
+            </div>
+            <p class="hint">El borrador se guarda solo en este dispositivo hasta que envíes.</p>
+          </template>
+
+          <!-- Archivo -->
+          <template v-else>
+            <label for="entrega-archivo">Archivo (texto, PDF, PNG, JPG o DOCX · máx. 5 MB)</label>
+            <input
+              id="entrega-archivo"
+              class="input"
+              type="file"
+              accept=".txt,.pdf,.png,.jpg,.jpeg,.docx"
+              :disabled="busy"
+              @change="onFile"
+            />
+            <p v-if="fileError" class="error" role="alert">{{ fileError }}</p>
+            <p v-if="file" class="hint">Seleccionado: {{ file.name }} ({{ Math.ceil(file.size / 1024) }} KB)</p>
+            <div v-if="busy && uploadPercent > 0" class="progress" role="status" aria-live="polite">
+              <progress :value="uploadPercent" max="100" /> {{ uploadPercent }}%
+            </div>
+            <div class="actions">
+              <button type="button" class="btn btn--primary" :disabled="busy || !file" @click="enviarArchivo">
+                {{ submitError ? 'Reintentar envío' : 'Subir y enviar' }}
+              </button>
+            </div>
+            <p class="hint">El envío se confirma solo cuando el servidor verifica el archivo real.</p>
+          </template>
         </template>
       </div>
 
@@ -215,6 +348,14 @@ async function enviar(): Promise<void> {
               · {{ v.format }}
             </p>
             <p class="version-body">{{ v.description }}</p>
+            <button
+              v-if="v.format === 'file' && v.storagePath"
+              type="button"
+              class="btn btn--secondary"
+              @click="verArchivo(v.storagePath)"
+            >
+              Ver archivo
+            </button>
           </li>
         </ol>
       </div>
@@ -266,6 +407,27 @@ label {
 .adjustment {
   border-left: 4px solid var(--rt-warning);
   background: var(--rt-warning-soft);
+}
+.mode {
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-radius-sm);
+  padding: var(--rt-space-2);
+  margin: var(--rt-space-2) 0;
+}
+.mode label {
+  display: inline-flex;
+  gap: var(--rt-space-1);
+  margin-right: var(--rt-space-3);
+  font-weight: 400;
+}
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--rt-space-2);
+  margin-top: var(--rt-space-2);
+}
+.progress progress {
+  flex: 1;
 }
 .versions {
   list-style: none;

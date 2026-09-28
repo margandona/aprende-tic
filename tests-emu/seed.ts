@@ -47,6 +47,8 @@ export const IDS = {
   s7: 'enr-s7',
   s8: 'enr-s8',
   s9: 'enr-s9',
+  s10: 'enr-s10',
+  s11: 'enr-s11',
   t1: 'teacher-1',
   t2: 'teacher-2',
   t3: 'teacher-3',
@@ -59,6 +61,8 @@ export const IDS = {
   codeS7: 'LOBO-07',
   codeS8: 'TIGRE-08',
   codeS9: 'MONO-09',
+  codeS10: 'CUERVO-10',
+  codeS11: 'HALCON-11',
 }
 
 const future = () => Timestamp.fromMillis(Date.now() + 180 * 24 * 60 * 60 * 1000)
@@ -71,7 +75,7 @@ async function clearAll(): Promise<void> {
   const collections = [
     'institutions', 'programVersions', 'courses', 'missions', 'milestones', 'indicators', 'badges',
     'teachers', 'teacherCourses', 'enrollments', 'codeCredentials', 'sessionBindings',
-    'assessments', 'assessmentHistory', 'xpEvents', 'badgeAwards',
+    'assessments', 'assessmentHistory', 'xpEvents', 'badgeAwards', 'deliveryHistory',
     'conditionsSurveys', 'diagnosisReviewHistory', 'teacherDemoCodes',
     'uploadReservations', 'redeemRate', 'redeemAttempts', 'auditLogs',
   ]
@@ -131,6 +135,8 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`enrollments/${IDS.s7}`), { courseId: IDS.courseX, pseudonym: 'Lobo-07', state: 'active', activeCodeHash: hashCode(IDS.codeS7) })
   b.set(adminDb.doc(`enrollments/${IDS.s8}`), { courseId: IDS.courseX, pseudonym: 'Tigre-08', state: 'active', activeCodeHash: hashCode(IDS.codeS8) })
   b.set(adminDb.doc(`enrollments/${IDS.s9}`), { courseId: IDS.courseX, pseudonym: 'Mono-09', state: 'active', activeCodeHash: hashCode(IDS.codeS9) })
+  b.set(adminDb.doc(`enrollments/${IDS.s10}`), { courseId: IDS.courseX, pseudonym: 'Cuervo-10', state: 'active', activeCodeHash: hashCode(IDS.codeS10) })
+  b.set(adminDb.doc(`enrollments/${IDS.s11}`), { courseId: IDS.courseX, pseudonym: 'Halcón-11', state: 'active', activeCodeHash: hashCode(IDS.codeS11) })
 
   for (const [code, enrollmentId, courseId] of [
     [IDS.codeS1, IDS.s1, IDS.courseX],
@@ -142,6 +148,8 @@ export async function seedSynthetic(): Promise<void> {
     [IDS.codeS7, IDS.s7, IDS.courseX],
     [IDS.codeS8, IDS.s8, IDS.courseX],
     [IDS.codeS9, IDS.s9, IDS.courseX],
+    [IDS.codeS10, IDS.s10, IDS.courseX],
+    [IDS.codeS11, IDS.s11, IDS.courseX],
   ] as const) {
     b.set(adminDb.doc(`codeCredentials/${hashCode(code)}`), { enrollmentId, courseId, state: 'active', issuedAt: Timestamp.now(), expiresAt: future(), failedAttempts: 0, lockedUntil: null })
   }

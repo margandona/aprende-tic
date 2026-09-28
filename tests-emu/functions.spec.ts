@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { httpsCallable } from 'firebase/functions'
+import { getStorage } from 'firebase-admin/storage'
 import { IDS, Timestamp, adminDb, adminUpload, seedSynthetic, studentClient, teacherClient } from './helpers'
 
 beforeEach(async () => {
@@ -532,5 +533,91 @@ describe('RevisiÃ³n de misiÃ³n Â· validaciÃ³n, XP, ajuste y equivalencia (I2b)',
     await httpsCallable(t.functions, 'restoreXp')({ xpEventId })
     expect((await adminDb.doc(`xpEvents/${xpEventId}`).get()).data()?.revokedAt).toBeNull()
     expect((await xpOf(IDS.s7)).size).toBe(1)
+  })
+})
+
+
+describe('I2c · reapertura segura, no evaluado y limpieza de reservas', () => {
+  async function freshDelivery(code: string) {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code })
+    const { deliveryId } = (
+      await httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')({ milestoneId: IDS.milestone2 })
+    ).data
+    return { s, deliveryId }
+  }
+
+  it('reabre solo desde por revisar o logrado, con historial y sin duplicar XP', async () => {
+    const { s, deliveryId } = await freshDelivery(IDS.codeS4)
+    const t = await teacherClient(IDS.t1)
+
+    // Desde not_started no se reabre.
+    await expect(httpsCallable(t.functions, 'reopenMilestone')({ deliveryId })).rejects.toThrow()
+
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'rc1', format: 'text', description: 'x' })
+    await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'achieved' }] })
+
+    await httpsCallable(t.functions, 'reopenMilestone')({ deliveryId, action: 'Ajusta la fuente.' })
+    const d = await adminDb.doc(`deliveries/${deliveryId}`).get()
+    expect(d.data()?.state).toBe('in_progress')
+    expect((d.data()?.adjustment as { action: string }).action).toBe('Ajusta la fuente.')
+    expect((await adminDb.collection('deliveryHistory').where('deliveryId', '==', deliveryId).get()).size).toBe(1)
+
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'rc2', format: 'text', description: 'y' })
+    await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'achieved' }] })
+    const xp = await adminDb.collection('xpEvents').where('enrollmentId', '==', IDS.s4).where('milestoneId', '==', IDS.milestone2).get()
+    expect(xp.size).toBe(1)
+  })
+
+  it('no reabre una entrega ya en proceso', async () => {
+    const t = await teacherClient(IDS.t1)
+    await expect(httpsCallable(t.functions, 'reopenMilestone')({ deliveryId: `${IDS.s9}_${IDS.milestone2}` })).rejects.toThrow()
+  })
+
+  it('acredita el hito con todo «no evaluado» sin convertir la competencia en 0', async () => {
+    const t = await teacherClient(IDS.t1)
+    await httpsCallable(t.functions, 'validateMilestone')({
+      deliveryId: `${IDS.s7}_${IDS.milestone2}`,
+      assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'not_evaluated' }],
+    })
+    const d = await adminDb.doc(`deliveries/${IDS.s7}_${IDS.milestone2}`).get()
+    expect(d.data()?.state).toBe('achieved')
+    expect(d.data()?.competenceObserved).toBe(false)
+    expect((await adminDb.doc(`assessments/${IDS.s7}_${IDS.milestone2}_D1`).get()).data()?.level).toBe('not_evaluated')
+    expect((await adminDb.collection('xpEvents').where('enrollmentId', '==', IDS.s7).where('milestoneId', '==', IDS.milestone2).get()).size).toBe(1)
+  })
+
+  it('marca competenceObserved=true cuando hay alguna observación', async () => {
+    const t = await teacherClient(IDS.t1)
+    await httpsCallable(t.functions, 'validateMilestone')({
+      deliveryId: `${IDS.s7}_${IDS.milestone2}`,
+      assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'developing' }],
+    })
+    expect((await adminDb.doc(`deliveries/${IDS.s7}_${IDS.milestone2}`).get()).data()?.competenceObserved).toBe(true)
+  })
+
+  it('rechaza si el MIME real no coincide con la reserva', async () => {
+    const { s, deliveryId } = await freshDelivery(IDS.codeS4)
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+    const r = (await reserve({ deliveryId, fileName: 'guia.pdf', contentType: 'application/pdf', sizeBytes: 1024 })).data
+    await adminUpload(r.path, Buffer.alloc(1024), 'text/plain')
+    await expect(
+      httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'mime1', format: 'file', description: 'x', reservationId: r.reservationId }),
+    ).rejects.toThrow()
+  })
+
+  it('limpia reservas caducadas sin evidencia y borra el objeto huérfano', async () => {
+    const { s, deliveryId } = await freshDelivery(IDS.codeS4)
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+    const r = (await reserve({ deliveryId, fileName: 'guia.txt', contentType: 'text/plain', sizeBytes: 3 })).data
+    await adminUpload(r.path, Buffer.from('abc'), 'text/plain')
+    await adminDb.doc(`uploadReservations/${r.reservationId}`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) })
+
+    const t = await teacherClient(IDS.t1)
+    const res = await httpsCallable<{ courseId: string }, { removed: number }>(t.functions, 'cleanupExpiredUploads')({ courseId: IDS.courseX })
+    expect(res.data.removed).toBeGreaterThanOrEqual(1)
+    expect((await adminDb.doc(`uploadReservations/${r.reservationId}`).get()).data()?.state).toBe('expired')
+    const [exists] = await getStorage().bucket('demo-red-tic.appspot.com').file(r.path).exists()
+    expect(exists).toBe(false)
   })
 })

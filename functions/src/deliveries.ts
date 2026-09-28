@@ -276,3 +276,52 @@ export const registerEquivalentEvidence = onCall(async (request) => {
   await audit(uid, 'teacher', 'register_equivalent_evidence', 'delivery', deliveryId)
   return { deliveryId, ...result }
 })
+
+/**
+ * Limpieza de reservas caducadas sin evidencia (objetos huérfanos).
+ * Un docente del curso elimina el objeto de Storage y marca la reserva como `expired`.
+ * En producción se ejecutaría además con un programador (Cloud Scheduler).
+ */
+export const cleanupExpiredUploads = onCall(async (request) => {
+  const uid = assertSignedIn(request)
+  const courseId = String(request.data?.courseId ?? '')
+  await assertTeacherOfCourse(uid, courseId)
+
+  const now = Date.now()
+  const bucketName = `${process.env.GCLOUD_PROJECT ?? 'demo-red-tic'}.appspot.com`
+  const snap = await db
+    .collection('uploadReservations')
+    .where('courseId', '==', courseId)
+    .where('state', '==', 'reserved')
+    .get()
+
+  let removed = 0
+  for (const docSnap of snap.docs) {
+    const r = docSnap.data()
+    const expiresAt = r.expiresAt as Timestamp
+    if (expiresAt.toMillis() > now) continue
+
+    // Si ya hay una evidencia que referencia la reserva, solo se marca como consumida.
+    const evSnap = await db
+      .collection(`deliveries/${r.deliveryId as string}/evidence`)
+      .where('reservationId', '==', docSnap.id)
+      .limit(1)
+      .get()
+    if (!evSnap.empty) {
+      await docSnap.ref.update({ state: 'consumed' })
+      continue
+    }
+
+    if (r.storagePath) {
+      try {
+        await getStorage().bucket(bucketName).file(r.storagePath as string).delete()
+      } catch {
+        /* el objeto no existe o ya fue eliminado */
+      }
+    }
+    await docSnap.ref.update({ state: 'expired', cleanedAt: Timestamp.now(), cleanedBy: uid })
+    removed += 1
+  }
+  await audit(uid, 'teacher', 'cleanup_expired_uploads', 'course', courseId, { removed })
+  return { removed }
+})

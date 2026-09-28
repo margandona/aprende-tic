@@ -34,6 +34,9 @@ test.describe('I2b · ciclo de revisión de la misión 2', () => {
     await page.locator('#lvl-enr-s7-D1').focus()
     expect(await page.evaluate(() => document.activeElement?.id ?? '')).toBe('lvl-enr-s7-D1')
 
+    // Regla «no evaluado»: se avisa antes de validar.
+    await expect(page.getByText(/Todos los indicadores están «No evaluado»/)).toBeVisible()
+
     await page.locator('#lvl-enr-s7-D1').selectOption('achieved')
     await page.locator('#str-enr-s7-D1').fill('Contrasta la autoría de las fuentes.')
     await page.locator('#nxt-enr-s7-D1').fill('Verificar la fecha antes de decidir.')
@@ -46,6 +49,11 @@ test.describe('I2b · ciclo de revisión de la misión 2', () => {
     // Recarga: la validación persiste.
     await page.reload()
     await expect(page.getByText(/vigente/)).toBeVisible()
+
+    // Reapertura segura para corrección (con historial, sin reiniciar XP).
+    await page.locator('#reopen-action').fill('Ajusta la fuente citada.')
+    await page.getByRole('button', { name: 'Reabrir para corrección' }).click()
+    await expect(page.getByText(/reabierta para corrección/)).toBeVisible()
 
     // Paneles separados en el estudiante.
     await page.getByRole('button', { name: 'Salir' }).click()

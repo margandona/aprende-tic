@@ -4,7 +4,7 @@
  * Las Admin SDK omiten las reglas del cliente: cada función valida el actor internamente.
  */
 export { redeemCode, regenerateCode, revokeSession, teacherDemoSignIn } from './identity'
-export { startDelivery, submitEvidence, registerEquivalentEvidence, reserveUpload } from './deliveries'
+export { startDelivery, submitEvidence, registerEquivalentEvidence, reserveUpload, cleanupExpiredUploads } from './deliveries'
 export { validateMilestone, correctAssessment, revokeXp, restoreXp, reopenMilestone, requestAdjustment } from './validation'
 export {
   saveConditionsSurvey,

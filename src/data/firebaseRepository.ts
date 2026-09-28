@@ -4,7 +4,8 @@
  */
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { db, functions } from '../firebase/client'
+import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
+import { db, functions, storage } from '../firebase/client'
 import { demo, invalidateSession, session } from '../stores/session'
 import type { SurveyAnswers } from './diagnosisSurvey'
 import type {
@@ -222,6 +223,7 @@ export interface MissionEvidenceVersion {
   format: string
   testModality: string
   description: string
+  storagePath: string | null
   createdAt: string | null
 }
 
@@ -298,6 +300,7 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
             format: (e.format as string) ?? 'text',
             testModality: (e.testModality as string) ?? 'not_applicable',
             description: (e.description as string) ?? '',
+            storagePath: (e.storagePath as string | null) ?? null,
             createdAt: toIso(e.createdAt),
           })
         }
@@ -663,6 +666,7 @@ export interface DeliveryEvidenceVersion {
   testModality: string
   description: string
   supports: string[]
+  storagePath: string | null
   createdAt: string | null
 }
 
@@ -727,6 +731,7 @@ export async function fetchDeliveryReview(deliveryId: string): Promise<DeliveryR
       testModality: (x.testModality as string) ?? 'not_applicable',
       description: (x.description as string) ?? '',
       supports: (x.supports as string[]) ?? [],
+      storagePath: (x.storagePath as string | null) ?? null,
       createdAt: toIso(x.createdAt),
     }
   })
@@ -870,6 +875,11 @@ export async function requestAdjustment(input: { deliveryId: string; action: str
   await httpsCallable(functions, 'requestAdjustment')(input)
 }
 
+/** Reapertura segura (pending_review o achieved → in_progress) con historial y acción opcional. */
+export async function reopenMilestone(input: { deliveryId: string; action?: string }): Promise<void> {
+  await httpsCallable(functions, 'reopenMilestone')(input)
+}
+
 export async function correctAssessment(input: { assessmentId: string; newLevel: string; comment: string }): Promise<void> {
   await httpsCallable(functions, 'correctAssessment')(input)
 }
@@ -893,4 +903,61 @@ export async function registerEquivalent(input: {
 }): Promise<{ deliveryId: string }> {
   const call = httpsCallable<typeof input, { deliveryId: string }>(functions, 'registerEquivalentEvidence')
   return (await call(input)).data
+}
+
+// ── Subida de archivos (I2c) ────────────────────────────────────────────────
+
+export interface UploadReservation {
+  reservationId: string
+  path: string
+  expiresAt: number
+}
+
+export async function reserveUpload(input: {
+  deliveryId: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+}): Promise<UploadReservation> {
+  const call = httpsCallable<typeof input, UploadReservation>(functions, 'reserveUpload')
+  return (await call(input)).data
+}
+
+/** Sube el archivo a la ruta reservada con progreso; resuelve cuando Storage confirma. */
+export function uploadEvidenceFile(
+  path: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(storageRef(storage, path), file, { contentType: file.type })
+    task.on(
+      'state_changed',
+      (snap) => onProgress?.(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+      reject,
+      () => resolve(),
+    )
+  })
+}
+
+export async function submitFileEvidence(input: {
+  deliveryId: string
+  submitKey: string
+  description: string
+  reservationId: string
+}): Promise<{ evidenceId: string; version: number; reused: boolean }> {
+  const call = httpsCallable<
+    { deliveryId: string; submitKey: string; format: string; description: string; reservationId: string },
+    { evidenceId: string; version: number; reused: boolean }
+  >(functions, 'submitEvidence')
+  return (await call({ ...input, format: 'file' })).data
+}
+
+export async function cleanupExpiredUploads(courseId: string): Promise<number> {
+  const call = httpsCallable<{ courseId: string }, { removed: number }>(functions, 'cleanupExpiredUploads')
+  return (await call({ courseId })).data.removed
+}
+
+export async function evidenceDownloadUrl(storagePath: string): Promise<string> {
+  return getDownloadURL(storageRef(storage, storagePath))
 }

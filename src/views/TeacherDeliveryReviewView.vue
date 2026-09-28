@@ -4,7 +4,9 @@ import { useRoute } from 'vue-router'
 import { useAsync } from '../composables/useAsync'
 import {
   correctAssessment,
+  evidenceDownloadUrl,
   fetchDeliveryReview,
+  reopenMilestone,
   requestAdjustment,
   restoreXp,
   revokeXp,
@@ -57,6 +59,15 @@ watch(
 )
 
 const state = computed(() => data.value?.state ?? 'not_started')
+// Regla «no evaluado»: si ningún indicador se observó, el XP acredita el hito (avance
+// narrativo) pero la competencia queda «No evaluado», nunca como 0.
+const allNotEvaluated = computed(
+  () =>
+    Boolean(data.value?.indicatorCodes.length) &&
+    (data.value?.members ?? []).every((m) =>
+      (data.value?.indicatorCodes ?? []).every((code) => draft[keyOf(m.enrollmentId, code)]?.level === 'not_evaluated'),
+    ),
+)
 const supportsLabel: Record<string, string> = {
   reading: 'Lectura guiada',
   extra_time: 'Más tiempo',
@@ -114,6 +125,32 @@ async function pedirAjuste(): Promise<void> {
     submitError.value = 'No se pudo pedir el ajuste.'
   } finally {
     busy.value = false
+  }
+}
+
+async function reabrir(): Promise<void> {
+  if (!adjustmentAction.value.trim()) {
+    submitError.value = 'Escribe una acción concreta para la corrección.'
+    return
+  }
+  busy.value = true
+  submitError.value = ''
+  try {
+    await reopenMilestone({ deliveryId: deliveryId.value, action: adjustmentAction.value.trim() })
+    notify('Entrega reabierta para corrección (se conserva el historial y el XP).')
+    await reload()
+  } catch {
+    submitError.value = 'No se pudo reabrir la entrega.'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function verArchivo(path: string): Promise<void> {
+  try {
+    window.open(await evidenceDownloadUrl(path), '_blank', 'noopener')
+  } catch {
+    submitError.value = 'No se pudo abrir el archivo.'
   }
 }
 
@@ -176,6 +213,14 @@ async function cambiarXp(xpEventId: string, revoked: boolean): Promise<void> {
               {{ ev.format }}<span v-if="ev.supports.length"> · Apoyos: {{ ev.supports.map((s) => supportsLabel[s] ?? s).join(', ') }}</span>
             </p>
             <p class="body">{{ ev.description }}</p>
+            <button
+              v-if="ev.format === 'file' && ev.storagePath"
+              type="button"
+              class="btn btn--secondary"
+              @click="verArchivo(ev.storagePath)"
+            >
+              Ver archivo
+            </button>
           </li>
         </ol>
       </section>
@@ -205,12 +250,14 @@ async function cambiarXp(xpEventId: string, revoked: boolean): Promise<void> {
           </div>
         </fieldset>
 
+        <p v-if="allNotEvaluated" class="notice" role="note">
+          Todos los indicadores están «No evaluado». Al validar, el hito se acredita como <strong>avance narrativo</strong>
+          (XP); la competencia observada queda «No evaluado», no como una valoración baja.
+        </p>
+
         <div class="actions">
           <button v-if="state === 'pending_review'" type="button" class="btn btn--primary" :disabled="busy" @click="validar">
             Validar hito
-          </button>
-          <button v-if="state === 'achieved'" type="button" class="btn btn--secondary" :disabled="busy" @click="validar">
-            Revalidar tras ajuste
           </button>
         </div>
       </section>
@@ -220,6 +267,16 @@ async function cambiarXp(xpEventId: string, revoked: boolean): Promise<void> {
         <label for="adjustment-action">Acción concreta para el estudiante</label>
         <input id="adjustment-action" v-model="adjustmentAction" class="input" type="text" maxlength="500" />
         <button type="button" class="btn btn--secondary" :disabled="busy" @click="pedirAjuste">Pedir ajuste</button>
+      </section>
+
+      <section v-if="state === 'achieved'" class="card" aria-labelledby="reopen-h">
+        <h2 id="reopen-h">Reabrir para corrección</h2>
+        <p class="hint">
+          Vuelve la entrega a «en proceso» para una nueva versión. Conserva el historial y no reinicia el XP.
+        </p>
+        <label for="reopen-action">Acción concreta para el estudiante</label>
+        <input id="reopen-action" v-model="adjustmentAction" class="input" type="text" maxlength="500" />
+        <button type="button" class="btn btn--secondary" :disabled="busy" @click="reabrir">Reabrir para corrección</button>
       </section>
 
       <section v-if="state === 'achieved'" class="card" aria-labelledby="corr-h">
@@ -296,6 +353,13 @@ label {
 }
 .ok {
   color: #14532d;
+  font-weight: 600;
+}
+.notice {
+  background: var(--rt-warning-soft);
+  color: #7c2d12;
+  padding: var(--rt-space-2);
+  border-radius: var(--rt-radius-sm);
   font-weight: 600;
 }
 .error {
