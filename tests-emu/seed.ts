@@ -35,7 +35,15 @@ export const IDS = {
   milestone5: 'milestone-5',
   milestone6: 'milestone-6',
   indicatorD1: 'D1',
+  indicatorD2: 'D2',
+  indicatorD3: 'D3',
+  indicatorD4: 'D4',
+  indicatorD5: 'D5',
   indicatorE1: 'E1',
+  indicatorE2: 'E2',
+  indicatorE3: 'E3',
+  indicatorE4: 'E4',
+  indicatorE5: 'E5',
   teamX: 'team-x',
   teamY: 'team-y',
   s1: 'enr-s1',
@@ -49,6 +57,7 @@ export const IDS = {
   s9: 'enr-s9',
   s10: 'enr-s10',
   s11: 'enr-s11',
+  s12: 'enr-s12',
   t1: 'teacher-1',
   t2: 'teacher-2',
   t3: 'teacher-3',
@@ -63,6 +72,7 @@ export const IDS = {
   codeS9: 'MONO-09',
   codeS10: 'CUERVO-10',
   codeS11: 'HALCON-11',
+  codeS12: 'GARZA-12',
 }
 
 const future = () => Timestamp.fromMillis(Date.now() + 180 * 24 * 60 * 60 * 1000)
@@ -98,22 +108,37 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`courses/${IDS.courseX}`), { institutionId: IDS.institution, name: '1º Medio A', level: '1º medio', year: 2026, programVersionId: IDS.programVersion, status: 'active' })
   b.set(adminDb.doc(`courses/${IDS.courseY}`), { institutionId: IDS.institution, name: '1º Medio B', level: '1º medio', year: 2026, programVersionId: IDS.programVersion, status: 'active' })
 
-  // Seis misiones (Fase 6). I2a conecta la misión 2 «Escuchar la señal» (ficha de necesidad, texto).
-  b.set(adminDb.doc(`missions/${IDS.mission1}`), { programVersionId: IDS.programVersion, order: 1, name: 'Abrir el mapa', prompt: '¿Qué sabemos y qué necesitamos averiguar?', deliverable: 'Diagnóstico y una pregunta abierta para un posible usuario.', status: 'active' })
+  // Seis misiones (Fase 6). Cada misión tiene un hito con consigna, indicadores, XP y modalidades.
+  // XP por misión = suma de las acciones de Fase 7: M1 20, M2 35 (20+15), M3 20, M4 20, M5 45 (20+25), M6 20 = 160.
+  b.set(adminDb.doc(`missions/${IDS.mission1}`), { programVersionId: IDS.programVersion, order: 1, name: 'Abrir el mapa', prompt: '¿Qué sabemos y qué necesitamos averiguar?', deliverable: 'Una pregunta abierta para un posible usuario.', status: 'active' })
   b.set(adminDb.doc(`missions/${IDS.mission2}`), { programVersionId: IDS.programVersion, order: 2, name: 'Escuchar la señal', prompt: '¿Qué problema merece una solución?', deliverable: 'Ficha de necesidad con evidencias y fuentes revisadas.', status: 'active' })
   b.set(adminDb.doc(`missions/${IDS.mission3}`), { programVersionId: IDS.programVersion, order: 3, name: 'Elegir una ruta', prompt: '¿Qué propuesta ofrece valor?', deliverable: 'Matriz de alternativas, propuesta de valor y plan.', status: 'active' })
   b.set(adminDb.doc(`missions/${IDS.mission4}`), { programVersionId: IDS.programVersion, order: 4, name: 'Construir el primer puente', prompt: '¿Puede usarla otra persona?', deliverable: 'Prototipo v1 (guía, tutorial o microtaller).', status: 'active' })
   b.set(adminDb.doc(`missions/${IDS.mission5}`), { programVersionId: IDS.programVersion, order: 5, name: 'Probar el puente', prompt: '¿Qué ocurre al probarla?', deliverable: 'Registro de prueba y versión 2.', status: 'active' })
-  b.set(adminDb.doc(`missions/${IDS.mission6}`), { programVersionId: IDS.programVersion, order: 6, name: 'Compartir la ruta', prompt: '¿Qué aprendimos y qué valor creamos?', deliverable: 'Presentación, postest y reflexión individual.', status: 'active' })
+  b.set(adminDb.doc(`missions/${IDS.mission6}`), { programVersionId: IDS.programVersion, order: 6, name: 'Compartir la ruta', prompt: '¿Qué aprendimos y qué valor creamos?', deliverable: 'Presentación y reflexión individual.', status: 'active' })
 
-  b.set(adminDb.doc(`milestones/${IDS.milestone1}`), { missionId: IDS.mission1, order: 1, title: 'Diagnóstico', xpValue: 20, indicatorCodes: [IDS.indicatorD1, IDS.indicatorE1] })
-  b.set(adminDb.doc(`milestones/${IDS.milestone2}`), { missionId: IDS.mission2, order: 1, title: 'Ficha de necesidad', xpValue: 20, indicatorCodes: [IDS.indicatorD1] })
-  b.set(adminDb.doc(`milestones/${IDS.milestone3}`), { missionId: IDS.mission3, order: 1, title: 'Matriz de alternativas', xpValue: 20, indicatorCodes: [IDS.indicatorD1] })
-  b.set(adminDb.doc(`milestones/${IDS.milestone4}`), { missionId: IDS.mission4, order: 1, title: 'Prototipo v1', xpValue: 20, indicatorCodes: [IDS.indicatorD1] })
-  b.set(adminDb.doc(`milestones/${IDS.milestone5}`), { missionId: IDS.mission5, order: 1, title: 'Registro de prueba', xpValue: 25, indicatorCodes: [IDS.indicatorD1] })
-  b.set(adminDb.doc(`milestones/${IDS.milestone6}`), { missionId: IDS.mission6, order: 1, title: 'Presentación y reflexión', xpValue: 20, indicatorCodes: [IDS.indicatorE1] })
-  b.set(adminDb.doc(`indicators/${IDS.indicatorD1}`), { code: 'D1', axis: 'D', name: 'Buscar y valorar información' })
-  b.set(adminDb.doc(`indicators/${IDS.indicatorE1}`), { code: 'E1', axis: 'E', name: 'Detectar una oportunidad' })
+  b.set(adminDb.doc(`milestones/${IDS.milestone1}`), { missionId: IDS.mission1, order: 1, title: 'Pregunta abierta', xpValue: 20, indicatorCodes: [IDS.indicatorD1, IDS.indicatorE1], modalities: ['text'], guidance: 'Escribe una pregunta abierta que le harías a un posible usuario; separa lo que sabes de lo que supones. (El diagnóstico se aplica aparte y no otorga XP.)' })
+  b.set(adminDb.doc(`milestones/${IDS.milestone2}`), { missionId: IDS.mission2, order: 1, title: 'Ficha de necesidad', xpValue: 35, indicatorCodes: [IDS.indicatorD1], modalities: ['text', 'file'], guidance: 'Formula la necesidad: para [destinatario], [tarea] se dificulta cuando [obstáculo], según [evidencia]. Contrasta dos fuentes y señala una afirmación por verificar.' })
+  b.set(adminDb.doc(`milestones/${IDS.milestone3}`), { missionId: IDS.mission3, order: 1, title: 'Alternativas y plan', xpValue: 20, indicatorCodes: [IDS.indicatorE2, IDS.indicatorE3], modalities: ['text', 'file'], guidance: 'Compara al menos dos alternativas (utilidad, accesibilidad, recursos), elige una con una razón, escribe la propuesta de valor y un plan mínimo con responsables.' })
+  b.set(adminDb.doc(`milestones/${IDS.milestone4}`), { missionId: IDS.mission4, order: 1, title: 'Prototipo v1', xpValue: 20, indicatorCodes: [IDS.indicatorD3, IDS.indicatorD4], modalities: ['file', 'text'], guidance: 'Produce una versión mínima (guía, tutorial o microtaller) que otra persona pueda intentar usar: lenguaje claro, pasos visibles y sin datos sensibles.' })
+  b.set(adminDb.doc(`milestones/${IDS.milestone5}`), { missionId: IDS.mission5, order: 1, title: 'Prueba y versión 2', xpValue: 45, indicatorCodes: [IDS.indicatorD3, IDS.indicatorD5, IDS.indicatorE4], modalities: ['file', 'text'], guidance: 'Observa a alguien usando el prototipo, registra un hallazgo (observación, no inferencia) y modifica la versión 2 explicando el cambio y su efecto.' })
+  b.set(adminDb.doc(`milestones/${IDS.milestone6}`), { missionId: IDS.mission6, order: 1, title: 'Presentación y reflexión', xpValue: 20, indicatorCodes: [IDS.indicatorD1, IDS.indicatorE5], modalities: ['text', 'file'], guidance: 'Presenta problema, evidencia, solución, prueba y límite; reflexiona qué mejorarías y qué evidencia sostiene la utilidad.' })
+
+  const indicatorSeed: Array<[string, 'D' | 'E', string, string, string]> = [
+    ['D1', 'D', 'Buscar y valorar información', 'Formula una búsqueda, compara dos fuentes y justifica cuál sirve.', 'Selecciona una fuente verificable y explica al menos dos razones, señalando una limitación.'],
+    ['D2', 'D', 'Organizar información y trabajar con otros', 'Ordena archivos y coedita un recurso dejando visibles aportes y versiones.', 'El equipo recupera la versión acordada; cada estudiante identifica su contribución.'],
+    ['D3', 'D', 'Crear un recurso comprensible y accesible', 'Elabora una guía o material ajustado a la tarea y a su usuario.', 'El usuario de prueba completa el paso esencial y el equipo corrige una barrera.'],
+    ['D4', 'D', 'Actuar con seguridad y respeto', 'Reconoce una señal de fraude y decide qué dato no compartir.', 'Justifica con una señal observable y evita solicitar o guardar datos sensibles.'],
+    ['D5', 'D', 'Resolver problemas con criterio tecnológico', 'Compara dos maneras de resolver una dificultad de uso y verifica si usa IA.', 'La solución probada documenta un ajuste y no presenta una salida de IA sin verificación.'],
+    ['E1', 'E', 'Detectar una oportunidad y escuchar', 'Describe una dificultad expresada u observada y distingue necesidad de solución.', 'Presenta necesidad, usuario y contexto con al menos una evidencia.'],
+    ['E2', 'E', 'Proponer valor y elegir una alternativa', 'Compara al menos dos soluciones según utilidad, accesibilidad y recursos.', 'La elección responde a la necesidad y justifica dos criterios.'],
+    ['E3', 'E', 'Movilizar recursos y planificar', 'Define roles, recursos, entregas y un plan de prueba realizable.', 'El plan asigna responsables, tiempos y recursos, y contempla un riesgo.'],
+    ['E4', 'E', 'Probar, colaborar y mejorar', 'Realiza una prueba de uso y modifica el prototipo argumentando el cambio.', 'Identifica un resultado observado, incorpora un cambio y explica su efecto.'],
+    ['E5', 'E', 'Reflexionar y comunicar el valor creado', 'Explica qué aprendió, qué haría distinto y qué evidencia sostiene la utilidad.', 'Distingue aporte personal, evidencia de usuario y una limitación.'],
+  ]
+  for (const [code, axis, name, descriptor, criterion] of indicatorSeed) {
+    b.set(adminDb.doc(`indicators/${code}`), { code, axis, name, descriptor, criterion })
+  }
   b.set(adminDb.doc('badges/badge-1'), { code: 'escucha', name: 'Escucha activa', criterion: 'Diferencia necesidad de suposición.' })
 
   b.set(adminDb.doc(`teachers/${IDS.t1}`), { displayName: 'Docente Uno (ficticio)', status: 'active' })
@@ -137,6 +162,7 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`enrollments/${IDS.s9}`), { courseId: IDS.courseX, pseudonym: 'Mono-09', state: 'active', activeCodeHash: hashCode(IDS.codeS9) })
   b.set(adminDb.doc(`enrollments/${IDS.s10}`), { courseId: IDS.courseX, pseudonym: 'Cuervo-10', state: 'active', activeCodeHash: hashCode(IDS.codeS10) })
   b.set(adminDb.doc(`enrollments/${IDS.s11}`), { courseId: IDS.courseX, pseudonym: 'Halcón-11', state: 'active', activeCodeHash: hashCode(IDS.codeS11) })
+  b.set(adminDb.doc(`enrollments/${IDS.s12}`), { courseId: IDS.courseX, pseudonym: 'Garza-12', state: 'active', activeCodeHash: hashCode(IDS.codeS12) })
 
   for (const [code, enrollmentId, courseId] of [
     [IDS.codeS1, IDS.s1, IDS.courseX],
@@ -150,6 +176,7 @@ export async function seedSynthetic(): Promise<void> {
     [IDS.codeS9, IDS.s9, IDS.courseX],
     [IDS.codeS10, IDS.s10, IDS.courseX],
     [IDS.codeS11, IDS.s11, IDS.courseX],
+    [IDS.codeS12, IDS.s12, IDS.courseX],
   ] as const) {
     b.set(adminDb.doc(`codeCredentials/${hashCode(code)}`), { enrollmentId, courseId, state: 'active', issuedAt: Timestamp.now(), expiresAt: future(), failedAttempts: 0, lockedUntil: null })
   }

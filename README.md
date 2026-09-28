@@ -54,10 +54,11 @@ npm run dev
 - **I2a:** **misión 2 «Escuchar la señal»** funcional con entrega de **texto** (inicio, borrador local, envío idempotente, versiones, reintento y confirmación) y **lectura docente de entregas pendientes** (sin valoración ni XP). El **postest** no puede iniciarse ni enviarse; el **registro equivalente en papel** queda documentado para I2b.
 - **I2b:** **revisión docente accionable** de la misión 2 (valoración por indicador, «no evaluado» separado, fortaleza/siguiente paso), **validación con XP único**, **pedir ajuste** y reintento, **entrega equivalente** (papel/audio/maqueta/dictado/adaptación) y **plantilla imprimible**.
 - **I2c:** **reapertura segura** y regla de **«no evaluado»** (XP narrativo vs competencia), y **subida de archivos** en la misión 2 (`reserveUpload` + Storage + `submitEvidence` con verificación real, progreso y limpieza de huérfanos).
-- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`, `docs/I2b-RESULTADOS.md`, `docs/I2c-RESULTADOS.md`.
+- **I2d:** **seis misiones funcionales** (consigna, evidencia, indicadores, hito, XP y modalidades según Fases 6–7; total 160 XP) y **robustez de archivos** (bucket efectivo, limpieza confirmada, reintento sin huérfanos).
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`, `docs/I2b-RESULTADOS.md`, `docs/I2c-RESULTADOS.md`, `docs/I2d-RESULTADOS.md`.
 
 ```bash
-npm run emu:test        # 72 pruebas de emulador + 33 de navegador
+npm run emu:test        # 75 pruebas de emulador + 38 de navegador
 npm run emu:start       # emuladores + app en modo interactivo
 ```
 
@@ -114,7 +115,8 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - **I2a:** misión 2 funcional con entrega de texto (inicio, borrador, envío idempotente y versiones) y lectura docente de entregas pendientes; valoración y XP quedan para I2b.
 - **I2b:** revisión docente con valoración por indicador y XP único, pedir ajuste/reintento, entrega equivalente (papel/audio/maqueta/dictado/adaptación) y plantilla imprimible.
 - **I2c:** reapertura segura, regla de «no evaluado» (XP narrativo vs competencia) y subida de archivos en la misión 2 con reserva, verificación y limpieza de huérfanos.
-- **Fuera de alcance todavía:** otras misiones, App Check exigido, proveedor institucional docente, retención/consentimiento, despliegue y datos reales.
+- **I2d:** seis misiones funcionales (consigna, evidencia, indicadores, hito y XP según Fases 6–7; 160 XP) con entrega textual/archivo y equivalencia.
+- **Fuera de alcance todavía:** revisión pedagógica del contenido, descarga autorizada, App Check exigido, proveedor institucional docente, retención/consentimiento, despliegue y datos reales.
 
 ## Informes
 
@@ -128,6 +130,7 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - `docs/I2a-RESULTADOS.md` — primera misión funcional con entrega de texto y lectura docente.
 - `docs/I2b-RESULTADOS.md` — revisión docente, XP único, ajuste/reintento y entrega equivalente.
 - `docs/I2c-RESULTADOS.md` — reapertura segura, regla de «no evaluado» y subida de archivos.
+- `docs/I2d-RESULTADOS.md` — seis misiones funcionales y robustez de archivos.
 - `docs/I2c-COSTOS-Y-RETENCION.md` — costos/cuotas estimados y retención propuesta.
 - `docs/I2a-ENTREGA-EQUIVALENTE-PAPEL.md` — procedimiento de entrega equivalente (papel/audio).
 - `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.

@@ -116,9 +116,22 @@ export const submitEvidence = onCall(async (request) => {
   const reservationId = request.data?.reservationId ? String(request.data.reservationId) : null
   if (!deliveryId || !submitKey) throw new HttpsError('invalid-argument', 'deliveryId y submitKey son obligatorios.')
 
-  // Idempotencia (camino rápido): el mismo submit_key devuelve el recibo sin re-consumir la reserva.
+  // Idempotencia (camino rápido): el mismo submit_key devuelve el recibo sin duplicar la evidencia.
   const existingEvidence = await db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`).get()
   if (existingEvidence.exists) {
+    // Si el reintento creó una reserva nueva, se limpia su objeto para no dejar huérfanos.
+    if (reservationId) {
+      const rSnap = await db.doc(`uploadReservations/${reservationId}`).get()
+      const r = rSnap.data()
+      if (rSnap.exists && r && r.state === 'reserved' && r.storagePath) {
+        try {
+          await getStorage().bucket().file(r.storagePath as string).delete()
+        } catch {
+          /* el objeto no existe: nada que borrar */
+        }
+        await rSnap.ref.update({ state: 'consumed', consumedAt: Timestamp.now() })
+      }
+    }
     return { evidenceId: submitKey, version: existingEvidence.data()!.version as number, reused: true }
   }
 
@@ -139,9 +152,9 @@ export const submitEvidence = onCall(async (request) => {
     storagePath = r.storagePath as string
 
     let meta: { contentType?: string; size?: string | number } | undefined
-    const bucketName = `${process.env.GCLOUD_PROJECT ?? 'demo-red-tic'}.appspot.com`
+    // Bucket desde la configuración efectiva de Admin (sin asumir el sufijo `.appspot.com`).
     try {
-      const [m] = await getStorage().bucket(bucketName).file(storagePath).getMetadata()
+      const [m] = await getStorage().bucket().file(storagePath).getMetadata()
       meta = m
     } catch {
       throw new HttpsError('failed-precondition', 'El archivo reservado no existe en Storage.')
@@ -279,8 +292,10 @@ export const registerEquivalentEvidence = onCall(async (request) => {
 
 /**
  * Limpieza de reservas caducadas sin evidencia (objetos huérfanos).
- * Un docente del curso elimina el objeto de Storage y marca la reserva como `expired`.
- * En producción se ejecutaría además con un programador (Cloud Scheduler).
+ * Distingue «objeto inexistente» de un fallo transitorio: solo marca la limpieza como
+ * completada (`expired`) **después de confirmar** que el objeto ya no existe; ante un
+ * error transitorio deja la reserva en `reserved` para reintentar en la próxima ejecución.
+ * El bucket se toma de la configuración efectiva de Admin.
  */
 export const cleanupExpiredUploads = onCall(async (request) => {
   const uid = assertSignedIn(request)
@@ -288,7 +303,7 @@ export const cleanupExpiredUploads = onCall(async (request) => {
   await assertTeacherOfCourse(uid, courseId)
 
   const now = Date.now()
-  const bucketName = `${process.env.GCLOUD_PROJECT ?? 'demo-red-tic'}.appspot.com`
+  const bucket = getStorage().bucket()
   const snap = await db
     .collection('uploadReservations')
     .where('courseId', '==', courseId)
@@ -296,6 +311,7 @@ export const cleanupExpiredUploads = onCall(async (request) => {
     .get()
 
   let removed = 0
+  let pending = 0
   for (const docSnap of snap.docs) {
     const r = docSnap.data()
     const expiresAt = r.expiresAt as Timestamp
@@ -313,15 +329,25 @@ export const cleanupExpiredUploads = onCall(async (request) => {
     }
 
     if (r.storagePath) {
+      const file = bucket.file(r.storagePath as string)
       try {
-        await getStorage().bucket(bucketName).file(r.storagePath as string).delete()
+        const [exists] = await file.exists()
+        if (exists) await file.delete()
+        // Confirmación: si el objeto aún existe, el borrado no se completó.
+        const [stillExists] = await file.exists()
+        if (stillExists) {
+          pending += 1
+          continue
+        }
       } catch {
-        /* el objeto no existe o ya fue eliminado */
+        // Fallo transitorio: se conserva la reserva para reintentar.
+        pending += 1
+        continue
       }
     }
     await docSnap.ref.update({ state: 'expired', cleanedAt: Timestamp.now(), cleanedBy: uid })
     removed += 1
   }
-  await audit(uid, 'teacher', 'cleanup_expired_uploads', 'course', courseId, { removed })
-  return { removed }
+  await audit(uid, 'teacher', 'cleanup_expired_uploads', 'course', courseId, { removed, pending })
+  return { removed, pending }
 })

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { httpsCallable } from 'firebase/functions'
 import { getStorage } from 'firebase-admin/storage'
-import { IDS, Timestamp, adminDb, adminUpload, seedSynthetic, studentClient, teacherClient } from './helpers'
+import { IDS, PROJECT, Timestamp, adminDb, adminUpload, seedSynthetic, studentClient, teacherClient } from './helpers'
 
 beforeEach(async () => {
   await seedSynthetic()
@@ -537,7 +537,7 @@ describe('RevisiÃ³n de misiÃ³n Â· validaciÃ³n, XP, ajuste y equivalencia (I2b)',
 })
 
 
-describe('I2c · reapertura segura, no evaluado y limpieza de reservas', () => {
+describe('I2c ï¿½ reapertura segura, no evaluado y limpieza de reservas', () => {
   async function freshDelivery(code: string) {
     const s = await studentClient()
     await httpsCallable(s.functions, 'redeemCode')({ code })
@@ -574,7 +574,7 @@ describe('I2c · reapertura segura, no evaluado y limpieza de reservas', () => {
     await expect(httpsCallable(t.functions, 'reopenMilestone')({ deliveryId: `${IDS.s9}_${IDS.milestone2}` })).rejects.toThrow()
   })
 
-  it('acredita el hito con todo «no evaluado» sin convertir la competencia en 0', async () => {
+  it('acredita el hito con todo ï¿½no evaluadoï¿½ sin convertir la competencia en 0', async () => {
     const t = await teacherClient(IDS.t1)
     await httpsCallable(t.functions, 'validateMilestone')({
       deliveryId: `${IDS.s7}_${IDS.milestone2}`,
@@ -587,7 +587,7 @@ describe('I2c · reapertura segura, no evaluado y limpieza de reservas', () => {
     expect((await adminDb.collection('xpEvents').where('enrollmentId', '==', IDS.s7).where('milestoneId', '==', IDS.milestone2).get()).size).toBe(1)
   })
 
-  it('marca competenceObserved=true cuando hay alguna observación', async () => {
+  it('marca competenceObserved=true cuando hay alguna observaciï¿½n', async () => {
     const t = await teacherClient(IDS.t1)
     await httpsCallable(t.functions, 'validateMilestone')({
       deliveryId: `${IDS.s7}_${IDS.milestone2}`,
@@ -606,7 +606,7 @@ describe('I2c · reapertura segura, no evaluado y limpieza de reservas', () => {
     ).rejects.toThrow()
   })
 
-  it('limpia reservas caducadas sin evidencia y borra el objeto huérfano', async () => {
+  it('limpia reservas caducadas sin evidencia y borra el objeto huï¿½rfano', async () => {
     const { s, deliveryId } = await freshDelivery(IDS.codeS4)
     const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
     const r = (await reserve({ deliveryId, fileName: 'guia.txt', contentType: 'text/plain', sizeBytes: 3 })).data
@@ -619,5 +619,101 @@ describe('I2c · reapertura segura, no evaluado y limpieza de reservas', () => {
     expect((await adminDb.doc(`uploadReservations/${r.reservationId}`).get()).data()?.state).toBe('expired')
     const [exists] = await getStorage().bucket('demo-red-tic.appspot.com').file(r.path).exists()
     expect(exists).toBe(false)
+  })
+})
+
+
+describe('I2d ï¿½ seis misiones, robustez de archivos y XP narrativo', () => {
+  async function freshDelivery(code: string, milestoneId = IDS.milestone2) {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code })
+    const { deliveryId } = (
+      await httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')({ milestoneId })
+    ).data
+    return { s, deliveryId }
+  }
+
+  it('completa las seis misiones y suma 160 XP (avance narrativo, no competencia)', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS4 })
+    const t = await teacherClient(IDS.t1)
+    const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
+    const submit = httpsCallable(s.functions, 'submitEvidence')
+    const validate = httpsCallable(t.functions, 'validateMilestone')
+
+    const plan: Array<[string, string[]]> = [
+      [IDS.milestone1, ['D1', 'E1']],
+      [IDS.milestone2, ['D1']],
+      [IDS.milestone3, ['E2', 'E3']],
+      [IDS.milestone4, ['D3', 'D4']],
+      [IDS.milestone5, ['D3', 'D5', 'E4']],
+      [IDS.milestone6, ['D1', 'E5']],
+    ]
+    for (const [milestoneId, indicators] of plan) {
+      const { deliveryId } = (await start({ milestoneId })).data
+      await submit({ deliveryId, submitKey: `k-${milestoneId}`, format: 'text', description: 'entrega' })
+      await validate({
+        deliveryId,
+        assessments: indicators.map((code) => ({ enrollmentId: IDS.s4, indicatorCode: code, level: 'achieved' })),
+      })
+    }
+    const xp = await adminDb.collection('xpEvents').where('enrollmentId', '==', IDS.s4).get()
+    const total = xp.docs.reduce((sum, d) => sum + ((d.data().xpValue as number) ?? 0), 0)
+    expect(xp.size).toBe(6)
+    expect(total).toBe(160)
+  })
+
+  it('reintentar el mismo submitKey con otra reserva no deja huï¿½rfano ni error', async () => {
+    const { s, deliveryId } = await freshDelivery(IDS.codeS4)
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+    const submit = httpsCallable<{ deliveryId: string; submitKey: string; format: string; description: string; reservationId: string }, { reused: boolean }>(s.functions, 'submitEvidence')
+
+    const r1 = (await reserve({ deliveryId, fileName: 'a.txt', contentType: 'text/plain', sizeBytes: 3 })).data
+    await adminUpload(r1.path, Buffer.from('abc'), 'text/plain')
+    const first = await submit({ deliveryId, submitKey: 'rk', format: 'file', description: 'a', reservationId: r1.reservationId })
+    expect(first.data.reused).toBe(false)
+
+    // El reintento crea una reserva redundante (simulada por el cliente): el servidor la limpia.
+    const r2 = { reservationId: 'res-redundante', path: `courses/${IDS.courseX}/enrollments/${IDS.s4}/deliveries/${deliveryId}/uploads/res-redundante/b.txt` }
+    await adminDb.doc(`uploadReservations/${r2.reservationId}`).set({
+      courseId: IDS.courseX, enrollmentId: IDS.s4, deliveryId, ownerEnrollmentId: IDS.s4,
+      fileName: 'b.txt', contentType: 'text/plain', sizeBytes: 3, storagePath: r2.path,
+      state: 'reserved', createdBy: s.uid, createdAt: Timestamp.now(), expiresAt: Timestamp.fromMillis(Date.now() + 60000),
+    })
+    await adminUpload(r2.path, Buffer.from('xyz'), 'text/plain')
+
+    const second = await submit({ deliveryId, submitKey: 'rk', format: 'file', description: 'b', reservationId: r2.reservationId })
+    expect(second.data.reused).toBe(true)
+    expect((await adminDb.collection(`deliveries/${deliveryId}/evidence`).get()).size).toBe(1)
+    expect((await adminDb.doc(`uploadReservations/${r2.reservationId}`).get()).data()?.state).toBe('consumed')
+    const [exists] = await getStorage().bucket(`${PROJECT}.appspot.com`).file(r2.path).exists()
+    expect(exists).toBe(false)
+  })
+
+  it('marca la limpieza solo tras confirmar y es idempotente', async () => {
+    const { s, deliveryId } = await freshDelivery(IDS.codeS4)
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+
+    // Reserva sin objeto (objeto inexistente ? fallo transitorio): se limpia igual.
+    const rNoObj = (await reserve({ deliveryId, fileName: 'sin.txt', contentType: 'text/plain', sizeBytes: 3 })).data
+    await adminDb.doc(`uploadReservations/${rNoObj.reservationId}`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) })
+
+    // Reserva con objeto: se borra y luego se confirma.
+    const rObj = (await reserve({ deliveryId, fileName: 'con.txt', contentType: 'text/plain', sizeBytes: 3 })).data
+    await adminUpload(rObj.path, Buffer.from('abc'), 'text/plain')
+    await adminDb.doc(`uploadReservations/${rObj.reservationId}`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) })
+
+    const t = await teacherClient(IDS.t1)
+    const cleanup = httpsCallable<{ courseId: string }, { removed: number; pending: number }>(t.functions, 'cleanupExpiredUploads')
+    const first = await cleanup({ courseId: IDS.courseX })
+    expect(first.data.removed).toBeGreaterThanOrEqual(2)
+    expect((await adminDb.doc(`uploadReservations/${rNoObj.reservationId}`).get()).data()?.state).toBe('expired')
+    expect((await adminDb.doc(`uploadReservations/${rObj.reservationId}`).get()).data()?.state).toBe('expired')
+    const [exists] = await getStorage().bucket(`${PROJECT}.appspot.com`).file(rObj.path).exists()
+    expect(exists).toBe(false)
+
+    // Segunda ejecuciï¿½n: nada nuevo que limpiar.
+    const second = await cleanup({ courseId: IDS.courseX })
+    expect(second.data.removed).toBe(0)
   })
 })

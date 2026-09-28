@@ -42,7 +42,7 @@ test.describe('I2b · ciclo de revisión de la misión 2', () => {
     await page.locator('#nxt-enr-s7-D1').fill('Verificar la fecha antes de decidir.')
     await page.getByRole('button', { name: 'Validar hito' }).click()
     await expect(page.getByText(/Hito validado/)).toBeVisible()
-    await expect(page.getByText(/· 20 XP ·/)).toBeVisible()
+    await expect(page.getByText(/· 35 XP ·/)).toBeVisible()
     await expect(page.getByText(/vigente/)).toBeVisible()
     await page.screenshot({ path: 'docs/capturas/12-docente-revision.png', fullPage: true })
 
@@ -58,7 +58,7 @@ test.describe('I2b · ciclo de revisión de la misión 2', () => {
     // Paneles separados en el estudiante.
     await page.getByRole('button', { name: 'Salir' }).click()
     await loginStudent(page, 'LOBO-07')
-    await expect(page.getByTestId('journey-xp')).toContainText('20')
+    await expect(page.getByTestId('journey-xp')).toContainText('35')
     await expect(page.getByText('Buscar y valorar información')).toHaveCount(0)
     await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Mis aprendizajes' }).click()
     await expect(page.getByRole('heading', { name: 'Mis aprendizajes observados' })).toBeVisible()
@@ -110,7 +110,7 @@ test.describe('I2b · ciclo de revisión de la misión 2', () => {
 
     await page.getByRole('button', { name: 'Salir' }).click()
     await loginStudent(page, 'TIGRE-08')
-    await expect(page.getByTestId('journey-xp')).toContainText('20')
+    await expect(page.getByTestId('journey-xp')).toContainText('35')
     await page.screenshot({ path: 'docs/capturas/14-equivalencia.png', fullPage: true })
 
     // Plantilla imprimible.

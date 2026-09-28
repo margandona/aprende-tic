@@ -229,7 +229,7 @@ export interface MissionEvidenceVersion {
 
 export interface MissionDetailData {
   mission: Mission | null
-  milestone: { id: string; title: string; xpValue: number; indicatorCodes: string[] } | null
+  milestone: { id: string; title: string; xpValue: number; indicatorCodes: string[]; modalities: string[]; guidance: string } | null
   deliveryId: string | null
   progress: MissionProgress | null
   evidence: Data | null
@@ -269,6 +269,8 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
         title: ms.title as string,
         xpValue: (ms.xpValue as number) ?? 0,
         indicatorCodes: (ms.indicatorCodes as string[]) ?? [],
+        modalities: (ms.modalities as string[]) ?? ['text'],
+        guidance: (ms.guidance as string) ?? '',
       }
       // Consulta (no getDoc) para no leer una entrega inexistente.
       const dSnap = await getDocs(

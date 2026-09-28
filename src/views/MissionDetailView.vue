@@ -30,6 +30,10 @@ const progress = computed(() => data.value?.progress ?? null)
 const versions = computed(() => data.value?.versions ?? [])
 const state = computed(() => progress.value?.state ?? 'not_started')
 const editable = computed(() => state.value === 'not_started' || state.value === 'in_progress')
+// Modalidades admitidas por el hito (texto/archivo). La equivalencia en papel la registra el docente.
+const modalities = computed(() => milestone.value?.modalities ?? ['text'])
+const allowText = computed(() => modalities.value.includes('text'))
+const allowFile = computed(() => modalities.value.includes('file'))
 
 // Formatos de archivo admitidos (deben coincidir con Storage Rules y Functions).
 const ALLOWED_TYPES = [
@@ -52,6 +56,8 @@ const submitError = ref('')
 const confirmation = ref<{ version: number; reused: boolean; evidenceId: string } | null>(null)
 // Clave de idempotencia: se genera una vez y se reutiliza al reintentar el mismo envío.
 const submitKey = ref<string | null>(null)
+// Reserva en curso: se reutiliza en reintentos para no subir el archivo dos veces.
+const pendingReservation = ref<{ reservationId: string; path: string; expiresAt: number; uploaded: boolean } | null>(null)
 
 const adjustment = computed(() => data.value?.adjustment ?? null)
 // Fecha de recepción confirmada por el servidor (no el reloj del dispositivo).
@@ -66,6 +72,7 @@ watch(
   () => data.value,
   (value) => {
     if (!value || !session.binding || !value.milestone) return
+    if (!allowText.value && allowFile.value) mode.value = 'file'
     if (editable.value && !draftText.value) {
       draftText.value = loadDraft(session.binding.enrollmentId, value.milestone.id)
     }
@@ -126,17 +133,25 @@ async function enviarArchivo(): Promise<void> {
     if (!deliveryId) deliveryId = await startMission(milestone.value.id)
     if (!submitKey.value) submitKey.value = crypto.randomUUID()
 
-    // 1) Reserva con caducidad (ruta ligada a curso/matrícula/entrega).
-    const reservation = await reserveUpload({
-      deliveryId,
-      fileName: file.value.name,
-      contentType: file.value.type,
-      sizeBytes: file.value.size,
-    })
-    // 2) Subida a Storage con progreso.
-    await uploadEvidenceFile(reservation.path, file.value, (p) => {
-      uploadPercent.value = p
-    })
+    // 1) Reserva con caducidad (se reutiliza en reintentos si sigue vigente).
+    let reservation = pendingReservation.value
+    if (!reservation || reservation.expiresAt <= Date.now()) {
+      const created = await reserveUpload({
+        deliveryId,
+        fileName: file.value.name,
+        contentType: file.value.type,
+        sizeBytes: file.value.size,
+      })
+      reservation = { reservationId: created.reservationId, path: created.path, expiresAt: created.expiresAt, uploaded: false }
+      pendingReservation.value = reservation
+    }
+    // 2) Subida a Storage con progreso (solo si no se subió antes).
+    if (!reservation.uploaded) {
+      await uploadEvidenceFile(reservation.path, file.value, (p) => {
+        uploadPercent.value = p
+      })
+      reservation.uploaded = true
+    }
     // 3) Confirmación solo tras verificar el objeto real en el servidor.
     const result = await submitFileEvidence({
       deliveryId,
@@ -145,6 +160,7 @@ async function enviarArchivo(): Promise<void> {
       reservationId: reservation.reservationId,
     })
     submitKey.value = null
+    pendingReservation.value = null
     confirmation.value = { version: result.version, reused: result.reused, evidenceId: result.evidenceId }
     message.value = 'Archivo registrado y verificado por el servidor.'
     file.value = null
@@ -269,9 +285,10 @@ async function enviar(): Promise<void> {
       <!-- Editor (solo mientras está en borrador) -->
       <div v-if="editable" class="card">
         <h2>Tu entrega</h2>
+        <p v-if="milestone?.guidance" class="hint">{{ milestone.guidance }}</p>
         <p class="hint">
-          No incluyas contraseñas ni datos personales. Puedes entregar texto o un archivo (mismo criterio de
-          acreditación).
+          No incluyas contraseñas ni datos personales. Si no tienes dispositivo, tu docente puede registrar una
+          <strong>entrega equivalente</strong> (papel/audio/maqueta) con el mismo criterio de acreditación.
         </p>
 
         <div v-if="!data?.deliveryId" class="actions">
@@ -279,16 +296,19 @@ async function enviar(): Promise<void> {
         </div>
 
         <template v-else>
-          <fieldset class="mode" :disabled="busy">
+          <fieldset v-if="allowText && allowFile" class="mode" :disabled="busy">
             <legend>Formato de entrega</legend>
             <label><input v-model="mode" type="radio" value="text" /> Texto</label>
             <label><input v-model="mode" type="radio" value="file" /> Archivo</label>
           </fieldset>
+          <p v-else class="hint">
+            Modalidad admitida: <strong>{{ allowFile ? 'archivo' : 'texto' }}</strong>.
+          </p>
 
           <p v-if="submitError" class="error" role="alert">{{ submitError }}</p>
 
           <!-- Texto -->
-          <template v-if="mode === 'text'">
+          <template v-if="mode === 'text' && allowText">
             <label for="entrega-texto">Texto de la entrega</label>
             <textarea id="entrega-texto" v-model="draftText" class="input" rows="6" :disabled="busy" />
             <div class="actions">
@@ -306,7 +326,7 @@ async function enviar(): Promise<void> {
           </template>
 
           <!-- Archivo -->
-          <template v-else>
+          <template v-else-if="allowFile">
             <label for="entrega-archivo">Archivo (texto, PDF, PNG, JPG o DOCX · máx. 5 MB)</label>
             <input
               id="entrega-archivo"
