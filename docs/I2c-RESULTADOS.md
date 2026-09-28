@@ -80,7 +80,7 @@ Propuesta en `docs/I2c-COSTOS-Y-RETENCION.md`: cuotas por archivo/tipo, limpieza
 ## 7. CI
 
 - `.github/workflows/ci.yml` — trabajos `calidad` y **`emuladores`** (Java 21 + Chromium + `npm run emu:test`).
-- **Estado:** pendiente de confirmar la ejecución de este commit (I2c).
+- **Estado confirmado:** ejecución **`36364684273`** (commit `a86c2b8`): **success** (2 m 42 s), con 72 pruebas de emulador y 33 de navegador en verde.
 
 ---
 
