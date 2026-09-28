@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import { onAuthStateChanged, signInAnonymously, signInWithCustomToken, signOut as fbSignOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase/client'
+import { clearAllDrafts, clearDraftsExcept } from '../data/drafts'
 
 export interface Binding {
   enrollmentId: string
@@ -200,6 +201,8 @@ export function setBinding(binding: Binding): void {
   session.role = 'student'
   session.displayName = binding.pseudonym
   session.invalidated = false
+  // En equipos compartidos, no conservar borradores de otra matrícula.
+  clearDraftsExcept(binding.enrollmentId)
   if (session.uid) writePersisted({ uid: session.uid, role: 'student', binding })
 }
 
@@ -228,6 +231,7 @@ export function invalidateSession(): void {
 
 export async function logout(): Promise<void> {
   clearSessionLocal()
+  clearAllDrafts()
   session.invalidated = false
   revalidatedForUid = null
   try {

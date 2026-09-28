@@ -107,6 +107,10 @@ service cloud.firestore {
         || isTeacherOfCourse(resource.data.courseId);
       allow write: if false;
     }
+    match /deliveryHistory/{id} {
+      allow read: if isTeacherOfCourse(resource.data.courseId);
+      allow write: if false;
+    }
     match /xpEvents/{id} {
       allow read: if (activeBinding() && resource.data.enrollmentId == myEnrollmentId())
         || isTeacherOfCourse(resource.data.courseId);

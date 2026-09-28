@@ -66,6 +66,8 @@ export interface Assessment {
   indicatorCode: string
   level: IndicatorLevel
   comment: string
+  strength?: string
+  nextStep?: string
   evidenceId: string | null
 }
 

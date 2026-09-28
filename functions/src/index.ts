@@ -5,7 +5,7 @@
  */
 export { redeemCode, regenerateCode, revokeSession, teacherDemoSignIn } from './identity'
 export { startDelivery, submitEvidence, registerEquivalentEvidence, reserveUpload } from './deliveries'
-export { validateMilestone, correctAssessment, revokeXp, reopenMilestone } from './validation'
+export { validateMilestone, correctAssessment, revokeXp, restoreXp, reopenMilestone, requestAdjustment } from './validation'
 export {
   saveConditionsSurvey,
   startDiagnosisAttempt,

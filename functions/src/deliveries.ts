@@ -17,6 +17,11 @@ import {
 
 export const deliveryIdFor = (enrollmentId: string, milestoneId: string) => `${enrollmentId}_${milestoneId}`
 
+/** Soportes admitidos para la entrega equivalente (sin conexión / sin dispositivo). */
+export const ALLOWED_EQUIVALENT_FORMATS = ['paper', 'audio_local', 'model', 'dictation', 'adaptation']
+/** Apoyos registrados por separado de la valoración. */
+export const EQUIVALENT_SUPPORTS = ['reading', 'extra_time', 'dictation', 'adapted_material', 'device_shared', 'other']
+
 /** Crea (idempotente y a prueba de carrera) la entrega individual de un hito. */
 export const startDelivery = onCall(async (request) => {
   const uid = assertSignedIn(request)
@@ -209,11 +214,16 @@ export const registerEquivalentEvidence = onCall(async (request) => {
   const description = String(request.data?.description ?? '')
   const testModality = String(request.data?.testModality ?? 'not_applicable')
   const submitKey = String(request.data?.submitKey ?? `eq_${Date.now()}`)
+  const rawSupports = Array.isArray(request.data?.supports) ? (request.data.supports as unknown[]) : []
+  const supports = rawSupports.filter((s): s is string => typeof s === 'string' && EQUIVALENT_SUPPORTS.includes(s))
 
   const courseId = await courseOfEnrollment(enrollmentId)
   await assertTeacherOfCourse(uid, courseId)
   if (!(await milestoneInCourse(milestoneId, courseId))) {
     throw new HttpsError('failed-precondition', 'El hito no pertenece al programa del curso.')
+  }
+  if (!ALLOWED_EQUIVALENT_FORMATS.includes(format)) {
+    throw new HttpsError('invalid-argument', 'Soporte de equivalencia no admitido.')
   }
 
   const deliveryId = deliveryIdFor(enrollmentId, milestoneId)
@@ -254,6 +264,7 @@ export const registerEquivalentEvidence = onCall(async (request) => {
       format,
       testModality,
       description,
+      supports,
       submitKey,
       createdBy: uid,
       createdAt: Timestamp.now(),

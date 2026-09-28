@@ -22,6 +22,7 @@ const teacherItems: NavItem[] = [
   { to: '/docente/panel', label: 'Panel', icon: '📊' },
   { to: '/docente/diagnosticos', label: 'Diagnósticos', icon: '🩺' },
   { to: '/docente/revision', label: 'Revisión', icon: '✅' },
+  { to: '/docente/equivalencia', label: 'Equivalencia', icon: '📄' },
   { to: '/docente/ajustes', label: 'Ajustes', icon: '⚙️' },
 ]
 

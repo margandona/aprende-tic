@@ -27,9 +27,18 @@ const draftText = ref('')
 const busy = ref(false)
 const message = ref('')
 const submitError = ref('')
-const confirmation = ref<{ version: number; reused: boolean; date: string } | null>(null)
+const confirmation = ref<{ version: number; reused: boolean; evidenceId: string } | null>(null)
 // Clave de idempotencia: se genera una vez y se reutiliza al reintentar el mismo envío.
 const submitKey = ref<string | null>(null)
+
+const adjustment = computed(() => data.value?.adjustment ?? null)
+// Fecha de recepción confirmada por el servidor (no el reloj del dispositivo).
+const confirmationDate = computed(() => {
+  const id = confirmation.value?.evidenceId
+  if (!id) return null
+  const v = versions.value.find((x) => x.evidenceId === id)
+  return v?.createdAt ? new Date(v.createdAt).toLocaleString('es-CL') : null
+})
 
 watch(
   () => data.value,
@@ -46,6 +55,13 @@ function guardarBorrador(): void {
   if (!session.binding || !milestone.value) return
   saveDraft(session.binding.enrollmentId, milestone.value.id, draftText.value)
   message.value = 'Borrador guardado solo en este dispositivo.'
+}
+
+function borrarBorrador(): void {
+  if (!session.binding || !milestone.value) return
+  clearDraft(session.binding.enrollmentId, milestone.value.id)
+  draftText.value = ''
+  message.value = 'Borrador local borrado.'
 }
 
 async function iniciar(): Promise<void> {
@@ -90,7 +106,7 @@ async function enviar(): Promise<void> {
     })
     clearDraft(session.binding.enrollmentId, milestone.value.id)
     submitKey.value = null
-    confirmation.value = { version: result.version, reused: result.reused, date: new Date().toLocaleString('es-CL') }
+    confirmation.value = { version: result.version, reused: result.reused, evidenceId: result.evidenceId }
     message.value = 'Entrega registrada. Tu docente la revisará y te dejará un comentario.'
     draftText.value = ''
     await reload()
@@ -136,9 +152,17 @@ async function enviar(): Promise<void> {
       <div v-if="confirmation" class="card receipt" role="status" data-testid="mission-receipt">
         <h2>Entrega confirmada</h2>
         <p>
-          Versión <strong>{{ confirmation.version }}</strong> · {{ confirmation.date }}
+          Versión <strong>{{ confirmation.version }}</strong> ·
+          <span v-if="confirmationDate">{{ confirmationDate }} (fecha del servidor)</span>
+          <span v-else>fecha confirmada por el servidor</span>
           <span v-if="confirmation.reused"> · (envío ya registrado, sin duplicar)</span>
         </p>
+      </div>
+
+      <!-- Devolución de «pedir ajuste» -->
+      <div v-if="editable && adjustment" class="card adjustment" role="note" data-testid="mission-adjustment">
+        <h2>Tu docente pidió un ajuste</h2>
+        <p>{{ adjustment.action }}</p>
       </div>
 
       <!-- Editor (solo mientras está en borrador) -->
@@ -162,6 +186,9 @@ async function enviar(): Promise<void> {
           <div class="actions">
             <button type="button" class="btn btn--secondary" :disabled="busy" @click="guardarBorrador">
               Guardar borrador
+            </button>
+            <button type="button" class="btn btn--secondary" :disabled="busy" @click="borrarBorrador">
+              Borrar borrador local
             </button>
             <button type="button" class="btn btn--primary" :disabled="busy" @click="enviar">
               {{ submitError ? 'Reintentar envío' : 'Enviar entrega' }}
@@ -235,6 +262,10 @@ label {
 }
 .receipt {
   border-left: 4px solid var(--rt-success);
+}
+.adjustment {
+  border-left: 4px solid var(--rt-warning);
+  background: var(--rt-warning-soft);
 }
 .versions {
   list-style: none;

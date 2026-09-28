@@ -193,6 +193,8 @@ export async function fetchLearnings(): Promise<LearningsData> {
       indicatorCode: d.data().indicatorCode as string,
       level: d.data().level as Assessment['level'],
       comment: (d.data().comment as string) ?? '',
+      strength: (d.data().strength as string) ?? '',
+      nextStep: (d.data().nextStep as string) ?? '',
       evidenceId: (d.data().evidenceId as string | null) ?? null,
     }))
 
@@ -230,6 +232,7 @@ export interface MissionDetailData {
   progress: MissionProgress | null
   evidence: Data | null
   versions: MissionEvidenceVersion[]
+  adjustment: { action: string; at: string | null } | null
 }
 
 function toIso(value: unknown): string | null {
@@ -238,7 +241,7 @@ function toIso(value: unknown): string | null {
 }
 
 export async function fetchMissionDetail(missionId: string): Promise<MissionDetailData> {
-  const empty: MissionDetailData = { mission: null, milestone: null, deliveryId: null, progress: null, evidence: null, versions: [] }
+  const empty: MissionDetailData = { mission: null, milestone: null, deliveryId: null, progress: null, evidence: null, versions: [], adjustment: null }
   const b = session.binding
   if (!b) return empty
   await gate()
@@ -252,6 +255,7 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
     let evidence: Data | null = null
     let deliveryId: string | null = null
     let milestone: MissionDetailData['milestone'] = null
+    let adjustment: MissionDetailData['adjustment'] = null
     const versions: MissionEvidenceVersion[] = []
 
     const msSnap = await getDocs(query(collection(db, 'milestones'), where('missionId', '==', missionId)))
@@ -281,6 +285,9 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
           state: (d.state as MissionProgress['state']) ?? 'not_started',
           evidenceId: (d.currentEvidenceId as string | null) ?? null,
         }
+        adjustment = d.adjustment
+          ? { action: (d.adjustment as Data).action as string, at: toIso((d.adjustment as Data).at) }
+          : null
         const evSnap = await getDocs(collection(db, `deliveries/${docSnap.id}/evidence`))
         for (const ev of evSnap.docs) {
           const e = ev.data() as Data
@@ -306,7 +313,7 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
         }
       }
     }
-    return { mission, milestone, deliveryId, progress, evidence, versions }
+    return { mission, milestone, deliveryId, progress, evidence, versions, adjustment }
   })
 }
 
@@ -335,6 +342,7 @@ export interface PendingDelivery {
   pseudonym: string
   missionName: string
   milestoneTitle: string
+  milestoneId: string
   state: string
   origin: string
   format: string
@@ -386,6 +394,7 @@ export async function fetchPendingDeliveries(): Promise<PendingDelivery[]> {
         pseudonym: (enroll.data()?.pseudonym as string) ?? 'Sin pseudónimo',
         missionName: (missionSnap?.data()?.name as string) ?? 'Misión',
         milestoneTitle: (ms.data()?.title as string) ?? 'Hito',
+        milestoneId,
         state: (data.state as string) ?? 'pending_review',
         origin,
         format,
@@ -642,4 +651,246 @@ export async function fetchTeacherDiagnosis(attemptId: string): Promise<TeacherD
     responses: responses.docs.map((d) => mapResponse(d.id, d.data() as Data)),
     history: historyEntries,
   }
+}
+
+// ── Revisión docente de misiones (I2b) ──────────────────────────────────────
+
+export interface DeliveryEvidenceVersion {
+  evidenceId: string
+  version: number
+  origin: string
+  format: string
+  testModality: string
+  description: string
+  supports: string[]
+  createdAt: string | null
+}
+
+export interface DeliveryAssessment {
+  assessmentId: string
+  enrollmentId: string
+  indicatorCode: string
+  level: string
+  comment: string
+  strength: string
+  nextStep: string
+}
+
+export interface DeliveryXp {
+  xpEventId: string
+  enrollmentId: string
+  xpValue: number
+  revoked: boolean
+}
+
+export interface DeliveryReview {
+  deliveryId: string
+  courseId: string
+  enrollmentId: string
+  milestoneId: string
+  scope: string
+  teamId: string | null
+  state: string
+  missionName: string
+  milestoneTitle: string
+  xpValue: number
+  programVersionId: string
+  indicatorCodes: string[]
+  currentEvidenceId: string | null
+  adjustment: { action: string; at: string | null } | null
+  evidences: DeliveryEvidenceVersion[]
+  members: { enrollmentId: string; pseudonym: string }[]
+  assessments: DeliveryAssessment[]
+  xp: DeliveryXp[]
+}
+
+export async function fetchDeliveryReview(deliveryId: string): Promise<DeliveryReview> {
+  const dSnap = await getDoc(doc(db, 'deliveries', deliveryId))
+  if (!dSnap.exists()) throw new Error('Entrega no encontrada.')
+  const d = dSnap.data() as Data
+  const courseId = d.courseId as string
+  const milestoneId = d.milestoneId as string
+
+  const msSnap = await getDoc(doc(db, 'milestones', milestoneId))
+  const missionId = msSnap.data()?.missionId as string | undefined
+  const missionSnap = missionId ? await getDoc(doc(db, 'missions', missionId)) : null
+  const programVersionId = (missionSnap?.data()?.programVersionId as string) ?? ''
+
+  const evSnap = await getDocs(collection(db, `deliveries/${deliveryId}/evidence`))
+  const evidences: DeliveryEvidenceVersion[] = evSnap.docs.map((e) => {
+    const x = e.data() as Data
+    return {
+      evidenceId: e.id,
+      version: (x.version as number) ?? 0,
+      origin: (x.origin as string) ?? 'student_digital',
+      format: (x.format as string) ?? 'text',
+      testModality: (x.testModality as string) ?? 'not_applicable',
+      description: (x.description as string) ?? '',
+      supports: (x.supports as string[]) ?? [],
+      createdAt: toIso(x.createdAt),
+    }
+  })
+  evidences.sort((a, c) => a.version - c.version)
+
+  // Integrantes (equipo) o propietario individual.
+  let memberIds: string[] = [d.ownerEnrollmentId as string]
+  if (d.scope === 'team' && d.teamId) {
+    const memSnap = await getDocs(collection(db, `teams/${d.teamId as string}/members`))
+    memberIds = memSnap.docs.map((m) => m.id)
+  }
+  const members = await Promise.all(
+    memberIds.map(async (enrollmentId) => {
+      const e = await getDoc(doc(db, 'enrollments', enrollmentId))
+      return { enrollmentId, pseudonym: (e.data()?.pseudonym as string) ?? 'Sin pseudónimo' }
+    }),
+  )
+
+  const [asSnap, xpSnap] = await Promise.all([
+    getDocs(query(collection(db, 'assessments'), where('courseId', '==', courseId), where('milestoneId', '==', milestoneId))),
+    getDocs(query(collection(db, 'xpEvents'), where('courseId', '==', courseId), where('milestoneId', '==', milestoneId))),
+  ])
+  const memberSet = new Set(memberIds)
+  const assessments: DeliveryAssessment[] = asSnap.docs
+    .map((a) => {
+      const x = a.data() as Data
+      return {
+        assessmentId: a.id,
+        enrollmentId: x.enrollmentId as string,
+        indicatorCode: x.indicatorCode as string,
+        level: x.level as string,
+        comment: (x.comment as string) ?? '',
+        strength: (x.strength as string) ?? '',
+        nextStep: (x.nextStep as string) ?? '',
+      }
+    })
+    .filter((a) => memberSet.has(a.enrollmentId))
+  const xp: DeliveryXp[] = xpSnap.docs
+    .map((x) => {
+      const v = x.data() as Data
+      return {
+        xpEventId: x.id,
+        enrollmentId: v.enrollmentId as string,
+        xpValue: (v.xpValue as number) ?? 0,
+        revoked: Boolean(v.revokedAt),
+      }
+    })
+    .filter((x) => memberSet.has(x.enrollmentId))
+
+  return {
+    deliveryId,
+    courseId,
+    enrollmentId: d.ownerEnrollmentId as string,
+    milestoneId,
+    scope: (d.scope as string) ?? 'individual',
+    teamId: (d.teamId as string | null) ?? null,
+    state: (d.state as string) ?? 'not_started',
+    missionName: (missionSnap?.data()?.name as string) ?? 'Misión',
+    milestoneTitle: (msSnap.data()?.title as string) ?? 'Hito',
+    xpValue: (msSnap.data()?.xpValue as number) ?? 0,
+    programVersionId,
+    indicatorCodes: (msSnap.data()?.indicatorCodes as string[]) ?? [],
+    currentEvidenceId: (d.currentEvidenceId as string | null) ?? null,
+    adjustment: d.adjustment ? { action: (d.adjustment as Data).action as string, at: toIso((d.adjustment as Data).at) } : null,
+    evidences,
+    members,
+    assessments,
+    xp,
+  }
+}
+
+export interface RosterEntry {
+  enrollmentId: string
+  pseudonym: string
+}
+
+/** Estudiantes de los cursos del docente autenticado. */
+export async function fetchTeacherRoster(): Promise<RosterEntry[]> {
+  const uid = session.uid
+  if (!uid || session.role !== 'teacher') return []
+  const tcs = await getDocs(query(collection(db, 'teacherCourses'), where('teacherUid', '==', uid)))
+  const out: RosterEntry[] = []
+  for (const tc of tcs.docs) {
+    const courseId = tc.data().courseId as string
+    const enrollments = await getDocs(query(collection(db, 'enrollments'), where('courseId', '==', courseId)))
+    for (const e of enrollments.docs) {
+      out.push({ enrollmentId: e.id, pseudonym: (e.data().pseudonym as string) ?? 'Sin pseudónimo' })
+    }
+  }
+  return out.sort((a, c) => a.pseudonym.localeCompare(c.pseudonym))
+}
+
+export interface CourseMilestone {
+  id: string
+  title: string
+  missionName: string
+  missionOrder: number
+  indicatorCodes: string[]
+}
+
+/** Hitos del programa de los cursos del docente autenticado. */
+export async function fetchCourseMilestones(): Promise<CourseMilestone[]> {
+  const uid = session.uid
+  if (!uid || session.role !== 'teacher') return []
+  const tcs = await getDocs(query(collection(db, 'teacherCourses'), where('teacherUid', '==', uid)))
+  const programVersions = new Set<string>()
+  for (const tc of tcs.docs) {
+    const course = await getDoc(doc(db, 'courses', tc.data().courseId as string))
+    const pv = course.data()?.programVersionId as string | undefined
+    if (pv) programVersions.add(pv)
+  }
+
+  const out: CourseMilestone[] = []
+  for (const pv of programVersions) {
+    const missions = await getDocs(query(collection(db, 'missions'), where('programVersionId', '==', pv)))
+    for (const m of missions.docs) {
+      const msSnap = await getDocs(query(collection(db, 'milestones'), where('missionId', '==', m.id)))
+      for (const ms of msSnap.docs) {
+        out.push({
+          id: ms.id,
+          title: (ms.data().title as string) ?? 'Hito',
+          missionName: (m.data().name as string) ?? 'Misión',
+          missionOrder: (m.data().order as number) ?? 0,
+          indicatorCodes: (ms.data().indicatorCodes as string[]) ?? [],
+        })
+      }
+    }
+  }
+  return out.sort((a, c) => a.missionOrder - c.missionOrder)
+}
+
+export async function validateDelivery(input: {
+  deliveryId: string
+  comment: string
+  assessments: { enrollmentId?: string; indicatorCode: string; level: string; comment?: string; strength?: string; nextStep?: string }[]
+}): Promise<void> {
+  await httpsCallable(functions, 'validateMilestone')(input)
+}
+
+export async function requestAdjustment(input: { deliveryId: string; action: string }): Promise<void> {
+  await httpsCallable(functions, 'requestAdjustment')(input)
+}
+
+export async function correctAssessment(input: { assessmentId: string; newLevel: string; comment: string }): Promise<void> {
+  await httpsCallable(functions, 'correctAssessment')(input)
+}
+
+export async function revokeXp(input: { xpEventId: string; reason: string }): Promise<void> {
+  await httpsCallable(functions, 'revokeXp')(input)
+}
+
+export async function restoreXp(input: { xpEventId: string }): Promise<void> {
+  await httpsCallable(functions, 'restoreXp')(input)
+}
+
+export async function registerEquivalent(input: {
+  enrollmentId: string
+  milestoneId: string
+  format: string
+  description: string
+  testModality: string
+  supports: string[]
+  submitKey: string
+}): Promise<{ deliveryId: string }> {
+  const call = httpsCallable<typeof input, { deliveryId: string }>(functions, 'registerEquivalentEvidence')
+  return (await call(input)).data
 }

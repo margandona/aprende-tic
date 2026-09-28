@@ -31,7 +31,8 @@ function evidenceText(code: string): string | null {
     <h1 id="learnings-title">Mis aprendizajes observados</h1>
     <p class="lede">
       Aquí está tu <strong>perfil de competencia observada</strong>: indicadores, evidencias y
-      retroalimentación del docente. Los campos sin evidencia aparecen como «No evaluado».
+      retroalimentación del docente. «No evaluado» significa <strong>sin valoración todavía</strong>, no una
+      valoración baja.
     </p>
 
     <StatePanel v-if="loading" state="loading" message="Cargando tus aprendizajes…" />
@@ -58,6 +59,12 @@ function evidenceText(code: string): string | null {
             <p class="indicator__criterion"><strong>Criterio de logro:</strong> {{ ind.criterion }}</p>
             <p v-if="assessmentByCode.get(ind.code)?.comment" class="indicator__comment">
               <strong>Retroalimentación:</strong> {{ assessmentByCode.get(ind.code)?.comment }}
+            </p>
+            <p v-if="assessmentByCode.get(ind.code)?.strength" class="indicator__comment">
+              <strong>Fortaleza observada:</strong> {{ assessmentByCode.get(ind.code)?.strength }}
+            </p>
+            <p v-if="assessmentByCode.get(ind.code)?.nextStep" class="indicator__comment">
+              <strong>Siguiente paso:</strong> {{ assessmentByCode.get(ind.code)?.nextStep }}
             </p>
             <p v-if="evidenceText(ind.code)" class="indicator__evidence">
               <strong>Evidencia:</strong> {{ evidenceText(ind.code) }}

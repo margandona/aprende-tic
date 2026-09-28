@@ -79,4 +79,30 @@ test.describe('I2a · misión con entrega de texto', () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow).toBeLessThanOrEqual(1)
   })
+
+  test('borra el borrador local y no lo conserva al cerrar sesión (equipo compartido)', async ({ page }) => {
+    await redeem(page, IDS.codeS5)
+    await abrirMision2(page)
+    // Pudu-05 ya tiene una entrega iniciada en pruebas anteriores; si no, se inicia.
+    if (await page.getByRole('button', { name: 'Iniciar misión' }).isVisible().catch(() => false)) {
+      await page.getByRole('button', { name: 'Iniciar misión' }).click()
+      await expect(page.getByText('Misión iniciada.')).toBeVisible()
+    }
+
+    await page.locator('#entrega-texto').fill('Borrador privado que no debe quedar.')
+    await page.getByRole('button', { name: 'Guardar borrador' }).click()
+    await expect(page.getByText('Borrador guardado solo en este dispositivo.')).toBeVisible()
+    await page.getByRole('button', { name: 'Borrar borrador local' }).click()
+    await expect(page.locator('#entrega-texto')).toHaveValue('')
+
+    // Guardar de nuevo y cerrar sesión: el borrador se limpia al salir.
+    await page.locator('#entrega-texto').fill('Texto que no debe persistir tras salir.')
+    await page.getByRole('button', { name: 'Guardar borrador' }).click()
+    await page.getByRole('button', { name: 'Salir' }).click()
+    await expect(page.getByRole('heading', { name: 'Entrar a RED-TIC' })).toBeVisible()
+
+    await redeem(page, IDS.codeS5)
+    await abrirMision2(page)
+    await expect(page.locator('#entrega-texto')).toHaveValue('')
+  })
 })

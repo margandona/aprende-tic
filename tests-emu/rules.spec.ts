@@ -213,6 +213,24 @@ describe('Firestore Rules · aislamiento por curso y rol', () => {
     await assertSucceeds(getDoc(doc(fs(IDS.t2), 'deliveries', `${IDS.s3}_${IDS.milestone2}`)))
     await assertSucceeds(getDoc(doc(fs(U.s3), 'deliveries', `${IDS.s3}_${IDS.milestone2}`)))
   })
+
+  it('el historial de entregas, las valoraciones y el XP los lee el docente del curso', async () => {
+    await adminDb.doc('deliveryHistory/dh1').set({
+      deliveryId: `${IDS.s7}_${IDS.milestone2}`, courseId: IDS.courseX, kind: 'adjustment', action: 'x',
+      changedBy: IDS.t1, changedAt: Timestamp.now(),
+    })
+    await assertSucceeds(getDoc(doc(fs(IDS.t1), 'deliveryHistory', 'dh1')))
+    await assertFails(getDoc(doc(fs(IDS.t2), 'deliveryHistory', 'dh1')))
+    await assertFails(setDoc(doc(fs(IDS.t1), 'deliveryHistory', 'dh2'), { courseId: IDS.courseX }))
+
+    await adminDb.doc('xpEvents/xp1').set({ courseId: IDS.courseX, enrollmentId: IDS.s1, milestoneId: IDS.milestone2, xpValue: 20 })
+    await assertSucceeds(getDoc(doc(fs(IDS.t1), 'xpEvents', 'xp1')))
+    await assertSucceeds(getDoc(doc(fs(U.s1), 'xpEvents', 'xp1')))
+    await assertFails(getDoc(doc(fs(IDS.t2), 'xpEvents', 'xp1')))
+
+    await assertSucceeds(getDoc(doc(fs(IDS.t1), 'assessments', `${IDS.s1}_${IDS.milestone1}_${IDS.indicatorD1}`)))
+    await assertFails(getDoc(doc(fs(IDS.t2), 'assessments', `${IDS.s1}_${IDS.milestone1}_${IDS.indicatorD1}`)))
+  })
 })
 
 describe('Storage Rules · reserva real de archivos', () => {

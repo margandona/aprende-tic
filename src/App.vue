@@ -12,16 +12,19 @@ function onWake(): void {
   if (session.role) void refreshSession()
 }
 
+function onVisibility(): void {
+  if (document.visibilityState === 'visible') onWake()
+}
+
 onMounted(() => {
   void ensureAuth()
   // Revalida el vínculo al volver a la pestaña/ventana: detecta revocación o expiración sin navegar.
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') onWake()
-  })
+  document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('focus', onWake)
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibility)
   window.removeEventListener('focus', onWake)
 })
 

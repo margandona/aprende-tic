@@ -409,3 +409,128 @@ describe('Misión y entrega de texto (I2a)', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)', () => {
+  const S7_DELIVERY = `${IDS.s7}_${IDS.milestone2}`
+  const xpOf = (enrollmentId: string) =>
+    adminDb.collection('xpEvents').where('enrollmentId', '==', enrollmentId).where('milestoneId', '==', IDS.milestone2).get()
+
+  it('valida el hito, otorga XP una sola vez y guarda fortaleza/siguiente paso', async () => {
+    const t = await teacherClient(IDS.t1)
+    const validate = httpsCallable(t.functions, 'validateMilestone')
+    await validate({
+      deliveryId: S7_DELIVERY,
+      comment: 'Buen contraste.',
+      assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'achieved', comment: 'ok', strength: 'Contrasta autoría.', nextStep: 'Verificar la fecha.' }],
+    })
+    expect((await adminDb.doc(`deliveries/${S7_DELIVERY}`).get()).data()?.state).toBe('achieved')
+    expect((await xpOf(IDS.s7)).size).toBe(1)
+    const a = await adminDb.doc(`assessments/${IDS.s7}_${IDS.milestone2}_D1`).get()
+    expect(a.data()?.strength).toBe('Contrasta autoría.')
+    expect(a.data()?.nextStep).toBe('Verificar la fecha.')
+
+    // Revalidar no duplica XP ni cambia el estado.
+    await expect(validate({ deliveryId: S7_DELIVERY, assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'achieved' }] })).rejects.toThrow()
+    expect((await xpOf(IDS.s7)).size).toBe(1)
+  })
+
+  it('admite «no evaluado» como estado distinto de una valoración baja', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS4 })
+    const { deliveryId } = (await httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')({ milestoneId: IDS.milestone2 })).data
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'ne1', format: 'text', description: 'x' })
+
+    const t = await teacherClient(IDS.t1)
+    await httpsCallable(t.functions, 'validateMilestone')({
+      deliveryId,
+      assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'not_evaluated' }],
+    })
+    expect((await adminDb.doc(`assessments/${IDS.s4}_${IDS.milestone2}_D1`).get()).data()?.level).toBe('not_evaluated')
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+  })
+
+  it('pide ajuste, conserva versiones y no duplica el XP en el reintento', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS4 })
+    const { deliveryId } = (await httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')({ milestoneId: IDS.milestone2 })).data
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'v1', format: 'text', description: 'v1' })
+
+    const t = await teacherClient(IDS.t1)
+    await httpsCallable(t.functions, 'requestAdjustment')({ deliveryId, action: 'Añade una fuente.' })
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('in_progress')
+    expect((await adminDb.collection('deliveryHistory').where('deliveryId', '==', deliveryId).get()).size).toBe(1)
+
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'v2', format: 'text', description: 'v2' })
+    await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'achieved' }] })
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+    const evs = await adminDb.collection(`deliveries/${deliveryId}/evidence`).get()
+    expect(evs.size).toBe(2)
+    expect((await xpOf(IDS.s4)).size).toBe(1)
+  })
+
+  it('valora por estudiante en una entrega de equipo', async () => {
+    const t = await teacherClient(IDS.t1)
+    const deliveryId = `${IDS.s1}_${IDS.milestone2}`
+    await httpsCallable(t.functions, 'validateMilestone')({
+      deliveryId,
+      assessments: [
+        { enrollmentId: IDS.s1, indicatorCode: 'D1', level: 'achieved' },
+        { enrollmentId: IDS.s2, indicatorCode: 'D1', level: 'developing' },
+      ],
+    })
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+    expect((await xpOf(IDS.s1)).size).toBe(1)
+    expect((await xpOf(IDS.s2)).size).toBe(1)
+    expect((await adminDb.doc(`assessments/${IDS.s2}_${IDS.milestone2}_D1`).get()).data()?.level).toBe('developing')
+  })
+
+  it('registra entrega equivalente con apoyos, la deja por revisar y la valida con el mismo XP', async () => {
+    const t = await teacherClient(IDS.t1)
+    const reg = await httpsCallable<{ enrollmentId: string; milestoneId: string; format: string; description: string; testModality: string; supports: string[]; submitKey: string }, { deliveryId: string }>(
+      t.functions,
+      'registerEquivalentEvidence',
+    )({
+      enrollmentId: IDS.s8,
+      milestoneId: IDS.milestone2,
+      format: 'paper',
+      description: 'Ficha en papel registrada por el docente.',
+      testModality: 'simulation',
+      supports: ['reading', 'extra_time'],
+      submitKey: 'eq-s8',
+    })
+    const deliveryId = reg.data.deliveryId
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('pending_review')
+    const ev = await adminDb.doc(`deliveries/${deliveryId}/evidence/eq-s8`).get()
+    expect(ev.data()?.origin).toBe('teacher_equivalent')
+    expect(ev.data()?.supports).toEqual(['reading', 'extra_time'])
+
+    await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s8, indicatorCode: 'D1', level: 'achieved' }] })
+    expect((await xpOf(IDS.s8)).size).toBe(1)
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+  })
+
+  it('un docente de otro curso o inactivo no valida', async () => {
+    const t2 = await teacherClient(IDS.t2)
+    await expect(
+      httpsCallable(t2.functions, 'validateMilestone')({ deliveryId: S7_DELIVERY, assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'achieved' }] }),
+    ).rejects.toThrow()
+    const t3 = await teacherClient(IDS.t3)
+    await expect(
+      httpsCallable(t3.functions, 'validateMilestone')({ deliveryId: S7_DELIVERY, assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'achieved' }] }),
+    ).rejects.toThrow()
+  })
+
+  it('retira y reinstaura el XP sin duplicar el evento', async () => {
+    const t = await teacherClient(IDS.t1)
+    await httpsCallable(t.functions, 'validateMilestone')({ deliveryId: S7_DELIVERY, assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'achieved' }] })
+    const xpSnap = await xpOf(IDS.s7)
+    const xpEventId = xpSnap.docs[0].id
+
+    await httpsCallable(t.functions, 'revokeXp')({ xpEventId, reason: 'corrección' })
+    expect((await adminDb.doc(`xpEvents/${xpEventId}`).get()).data()?.revokedAt).not.toBeNull()
+
+    await httpsCallable(t.functions, 'restoreXp')({ xpEventId })
+    expect((await adminDb.doc(`xpEvents/${xpEventId}`).get()).data()?.revokedAt).toBeNull()
+    expect((await xpOf(IDS.s7)).size).toBe(1)
+  })
+})

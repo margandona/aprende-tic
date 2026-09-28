@@ -14,7 +14,7 @@ test.describe('I2a · lectura docente de entregas pendientes', () => {
 
     await expect(page.getByRole('heading', { name: 'Entregas por revisar' })).toBeVisible()
     await expect(page.getByText('Zorro-01')).toBeVisible()
-    await expect(page.getByText(/Escuchar la señal/)).toBeVisible()
+    await expect(page.getByText(/Escuchar la señal/).first()).toBeVisible()
 
     // Sin valoración ni XP en esta porción.
     await expect(page.getByRole('button', { name: /Validar/i })).toHaveCount(0)

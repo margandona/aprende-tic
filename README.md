@@ -52,10 +52,11 @@ npm run dev
 - **I1b:** sesión/entorno con **fallo cerrado** y **flujo de diagnóstico** (encuesta A1–A6 + tareas T1–T5, borrador y envío inmutable) en la interfaz.
 - **I1c:** instrumento completo (caso de la biblioteca, fichas A/B, mensaje simulado), encuesta múltiple/opcional, transiciones cerradas y **vista docente mínima** con revisión, puntaje nulo e historial.
 - **I2a:** **misión 2 «Escuchar la señal»** funcional con entrega de **texto** (inicio, borrador local, envío idempotente, versiones, reintento y confirmación) y **lectura docente de entregas pendientes** (sin valoración ni XP). El **postest** no puede iniciarse ni enviarse; el **registro equivalente en papel** queda documentado para I2b.
-- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`.
+- **I2b:** **revisión docente accionable** de la misión 2 (valoración por indicador, «no evaluado» separado, fortaleza/siguiente paso), **validación con XP único**, **pedir ajuste** y reintento, **entrega equivalente** (papel/audio/maqueta/dictado/adaptación) y **plantilla imprimible**.
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`, `docs/I2b-RESULTADOS.md`.
 
 ```bash
-npm run emu:test        # 57 pruebas de emulador + 25 de navegador
+npm run emu:test        # 65 pruebas de emulador + 30 de navegador
 npm run emu:start       # emuladores en modo interactivo
 ```
 
@@ -110,7 +111,8 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - **I1b:** sesión/entorno con fallo cerrado y flujo de diagnóstico (encuesta A1–A6 + T1–T5) en la interfaz, solo en emuladores.
 - **I1c:** instrumento completo con estímulos (caso, fichas A/B, mensaje simulado), encuesta múltiple/opcional, corrección antes del envío, envío inmutable y **vista docente mínima** (revisión, puntaje nulo e historial).
 - **I2a:** misión 2 funcional con entrega de texto (inicio, borrador, envío idempotente y versiones) y lectura docente de entregas pendientes; valoración y XP quedan para I2b.
-- **Fuera de alcance todavía:** valoración y XP de misiones, registro equivalente en la UI, subida de archivos, App Check exigido, proveedor institucional docente, retención/consentimiento, despliegue y datos reales.
+- **I2b:** revisión docente con valoración por indicador y XP único, pedir ajuste/reintento, entrega equivalente (papel/audio/maqueta/dictado/adaptación) y plantilla imprimible.
+- **Fuera de alcance todavía:** subida de archivos (I2c), App Check exigido, proveedor institucional docente, retención/consentimiento, despliegue y datos reales.
 
 ## Informes
 
@@ -122,6 +124,7 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - `docs/I1b-RESULTADOS.md` — sesión/entorno con fallo cerrado y flujo de diagnóstico.
 - `docs/I1c-RESULTADOS.md` — instrumento completo, transiciones cerradas y vista docente mínima.
 - `docs/I2a-RESULTADOS.md` — primera misión funcional con entrega de texto y lectura docente.
-- `docs/I2a-ENTREGA-EQUIVALENTE-PAPEL.md` — procedimiento de entrega equivalente (papel/audio) para I2b.
+- `docs/I2b-RESULTADOS.md` — revisión docente, XP único, ajuste/reintento y entrega equivalente.
+- `docs/I2a-ENTREGA-EQUIVALENTE-PAPEL.md` — procedimiento de entrega equivalente (papel/audio).
 - `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.
 

@@ -14,9 +14,12 @@ interface AssessmentInput {
   indicatorCode: string
   level: string
   comment?: string
+  strength?: string
+  nextStep?: string
 }
 
-const VALID_LEVELS = ['incipient', 'developing', 'achieved', 'transferable']
+// «No evaluado» es un estado explícito, distinto de una valoración baja.
+const VALID_LEVELS = ['not_evaluated', 'incipient', 'developing', 'achieved', 'transferable']
 
 /**
  * Validación completa de un hito: estado, evidencia vigente, completitud por integrante,
@@ -138,6 +141,8 @@ export const validateMilestone = onCall(async (request) => {
         milestoneId: d.milestoneId,
         level: a.level,
         comment: a.comment ?? comment,
+        strength: a.strength ?? '',
+        nextStep: a.nextStep ?? '',
         evidenceId: d.currentEvidenceId,
         validatedBy: uid,
         validatedAt: Timestamp.now(),
@@ -155,7 +160,7 @@ export const validateMilestone = onCall(async (request) => {
         revokedAt: null,
       })
     }
-    tx.update(deliveryRef, { state: 'achieved', updatedAt: Timestamp.now() })
+    tx.update(deliveryRef, { state: 'achieved', adjustment: null, updatedAt: Timestamp.now() })
 
     return { status: 'achieved', assessments: input.length }
   })
@@ -215,5 +220,59 @@ export const reopenMilestone = onCall(async (request) => {
   if (!snap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
   await assertTeacherOfCourse(uid, snap.data()!.courseId as string)
   await ref.update({ state: 'in_progress', updatedAt: Timestamp.now() })
+  return { status: 'ok' }
+})
+
+/**
+ * «Pedir ajuste»: devuelve la entrega a `in_progress` con una acción concreta para el estudiante.
+ * Conserva evidencia, valoraciones e historial; el reintento no resta ni duplica XP.
+ */
+export const requestAdjustment = onCall(async (request) => {
+  const uid = assertSignedIn(request)
+  const deliveryId = String(request.data?.deliveryId ?? '')
+  const action = String(request.data?.action ?? '').trim().slice(0, 500)
+  if (!action) throw new HttpsError('invalid-argument', 'Indica una acción concreta para el ajuste.')
+
+  const ref = db.doc(`deliveries/${deliveryId}`)
+  const head = await ref.get()
+  if (!head.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
+  await assertTeacherOfCourse(uid, head.data()!.courseId as string)
+
+  await db.runTransaction(async (tx: Transaction) => {
+    const snap = await tx.get(ref)
+    const d = snap.data()!
+    if (d.state !== 'pending_review') {
+      throw new HttpsError('failed-precondition', 'Solo se puede pedir ajuste de una entrega «por revisar».')
+    }
+    tx.update(ref, {
+      state: 'in_progress',
+      adjustment: { action, by: uid, at: Timestamp.now() },
+      updatedAt: Timestamp.now(),
+    })
+    tx.set(db.collection('deliveryHistory').doc(), {
+      deliveryId,
+      courseId: d.courseId,
+      ownerEnrollmentId: d.ownerEnrollmentId,
+      milestoneId: d.milestoneId,
+      kind: 'adjustment',
+      action,
+      changedBy: uid,
+      changedAt: Timestamp.now(),
+    })
+  })
+  await audit(uid, 'teacher', 'request_adjustment', 'delivery', deliveryId, { action })
+  return { status: 'ok' }
+})
+
+/** Reinstaura un XP previamente retirado (mismo evento, sin duplicar). */
+export const restoreXp = onCall(async (request) => {
+  const uid = assertSignedIn(request)
+  const xpEventId = String(request.data?.xpEventId ?? '')
+  const ref = db.doc(`xpEvents/${xpEventId}`)
+  const snap = await ref.get()
+  if (!snap.exists) throw new HttpsError('not-found', 'Evento inexistente.')
+  await assertTeacherOfCourse(uid, snap.data()!.courseId as string)
+  await ref.update({ revokedAt: null, revokedReason: null, restoredBy: uid, restoredAt: Timestamp.now() })
+  await audit(uid, 'teacher', 'restore_xp', 'xpEvent', xpEventId)
   return { status: 'ok' }
 })

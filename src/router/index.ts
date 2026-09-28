@@ -9,6 +9,9 @@ import DiagnosisView from '../views/DiagnosisView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import TeacherPanelView from '../views/TeacherPanelView.vue'
 import TeacherReviewView from '../views/TeacherReviewView.vue'
+import TeacherDeliveryReviewView from '../views/TeacherDeliveryReviewView.vue'
+import TeacherEquivalentView from '../views/TeacherEquivalentView.vue'
+import PaperTemplateView from '../views/PaperTemplateView.vue'
 import TeacherDiagnosisView from '../views/TeacherDiagnosisView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 
@@ -50,6 +53,14 @@ export const routes: RouteRecordRaw[] = [
     meta: { role: 'teacher' },
   },
   { path: '/docente/revision', name: 'docente-revision', component: TeacherReviewView, meta: { role: 'teacher' } },
+  {
+    path: '/docente/revision/:deliveryId',
+    name: 'docente-revision-detalle',
+    component: TeacherDeliveryReviewView,
+    meta: { role: 'teacher' },
+  },
+  { path: '/docente/equivalencia', name: 'docente-equivalencia', component: TeacherEquivalentView, meta: { role: 'teacher' } },
+  { path: '/docente/plantilla', name: 'docente-plantilla', component: PaperTemplateView, meta: { role: 'teacher' } },
   { path: '/docente/ajustes', name: 'docente-ajustes', component: SettingsView, meta: { role: 'teacher' } },
   { path: '/:pathMatch(.*)*', name: 'no-encontrado', component: NotFoundView, meta: { public: true } },
 ]

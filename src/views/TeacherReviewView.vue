@@ -32,6 +32,7 @@ const items = computed(() => data.value ?? [])
           Formato: {{ d.format }}<span v-if="d.evidenceVersion"> · Versión {{ d.evidenceVersion }}</span>
         </p>
         <p class="review-item__body">{{ d.evidenceDescription || 'Sin descripción.' }}</p>
+        <RouterLink class="btn btn--secondary" :to="`/docente/revision/${d.deliveryId}`">Revisar</RouterLink>
       </li>
     </ul>
   </section>

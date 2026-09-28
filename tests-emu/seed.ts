@@ -44,6 +44,9 @@ export const IDS = {
   s4: 'enr-s4',
   s5: 'enr-s5',
   s6: 'enr-s6',
+  s7: 'enr-s7',
+  s8: 'enr-s8',
+  s9: 'enr-s9',
   t1: 'teacher-1',
   t2: 'teacher-2',
   t3: 'teacher-3',
@@ -53,6 +56,9 @@ export const IDS = {
   codeS4: 'PUDU-04',
   codeS5: 'GATO-05',
   codeS6: 'RANA-06',
+  codeS7: 'LOBO-07',
+  codeS8: 'TIGRE-08',
+  codeS9: 'MONO-09',
 }
 
 const future = () => Timestamp.fromMillis(Date.now() + 180 * 24 * 60 * 60 * 1000)
@@ -122,6 +128,9 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`enrollments/${IDS.s4}`), { courseId: IDS.courseX, pseudonym: 'Pudu-04', state: 'active', activeCodeHash: hashCode(IDS.codeS4) })
   b.set(adminDb.doc(`enrollments/${IDS.s5}`), { courseId: IDS.courseX, pseudonym: 'Gato-05', state: 'active', activeCodeHash: hashCode(IDS.codeS5) })
   b.set(adminDb.doc(`enrollments/${IDS.s6}`), { courseId: IDS.courseX, pseudonym: 'Rana-06', state: 'active', activeCodeHash: hashCode(IDS.codeS6) })
+  b.set(adminDb.doc(`enrollments/${IDS.s7}`), { courseId: IDS.courseX, pseudonym: 'Lobo-07', state: 'active', activeCodeHash: hashCode(IDS.codeS7) })
+  b.set(adminDb.doc(`enrollments/${IDS.s8}`), { courseId: IDS.courseX, pseudonym: 'Tigre-08', state: 'active', activeCodeHash: hashCode(IDS.codeS8) })
+  b.set(adminDb.doc(`enrollments/${IDS.s9}`), { courseId: IDS.courseX, pseudonym: 'Mono-09', state: 'active', activeCodeHash: hashCode(IDS.codeS9) })
 
   for (const [code, enrollmentId, courseId] of [
     [IDS.codeS1, IDS.s1, IDS.courseX],
@@ -130,6 +139,9 @@ export async function seedSynthetic(): Promise<void> {
     [IDS.codeS4, IDS.s4, IDS.courseX],
     [IDS.codeS5, IDS.s5, IDS.courseX],
     [IDS.codeS6, IDS.s6, IDS.courseX],
+    [IDS.codeS7, IDS.s7, IDS.courseX],
+    [IDS.codeS8, IDS.s8, IDS.courseX],
+    [IDS.codeS9, IDS.s9, IDS.courseX],
   ] as const) {
     b.set(adminDb.doc(`codeCredentials/${hashCode(code)}`), { enrollmentId, courseId, state: 'active', issuedAt: Timestamp.now(), expiresAt: future(), failedAttempts: 0, lockedUntil: null })
   }
@@ -169,6 +181,29 @@ export async function seedSynthetic(): Promise<void> {
     courseId: IDS.courseY, ownerEnrollmentId: IDS.s3, milestoneId: IDS.milestone2, scope: 'individual',
     teamId: null, state: 'in_progress', currentEvidenceId: null, evidenceCount: 0,
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+  })
+  // Entrega individual por revisar (Lobo-07) para la revisión docente de I2b.
+  b.set(adminDb.doc(`deliveries/${IDS.s7}_${IDS.milestone2}`), {
+    courseId: IDS.courseX, ownerEnrollmentId: IDS.s7, milestoneId: IDS.milestone2, scope: 'individual',
+    teamId: null, state: 'pending_review', currentEvidenceId: 'ev-s7', evidenceCount: 1,
+    createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+  })
+  b.set(adminDb.doc(`deliveries/${IDS.s7}_${IDS.milestone2}/evidence/ev-s7`), {
+    version: 1, origin: 'student_digital', format: 'text', testModality: 'not_applicable',
+    description: 'Ficha de necesidad de Lobo-07: las personas mayores no encuentran el botón de reserva.',
+    supports: [], submitKey: 'ev-s7', createdBy: IDS.s7, createdAt: Timestamp.now(), deletedAt: null,
+  })
+  // Entrega en proceso con un ajuste ya pedido (Mono-09): el estudiante debe enviar una nueva versión.
+  b.set(adminDb.doc(`deliveries/${IDS.s9}_${IDS.milestone2}`), {
+    courseId: IDS.courseX, ownerEnrollmentId: IDS.s9, milestoneId: IDS.milestone2, scope: 'individual',
+    teamId: null, state: 'in_progress', currentEvidenceId: 'ev-s9', evidenceCount: 1,
+    adjustment: { action: 'Añade una fuente y di qué confirmarías.', by: IDS.t1, at: Timestamp.now() },
+    createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+  })
+  b.set(adminDb.doc(`deliveries/${IDS.s9}_${IDS.milestone2}/evidence/ev-s9`), {
+    version: 1, origin: 'student_digital', format: 'text', testModality: 'not_applicable',
+    description: 'Ficha de necesidad de Mono-09 (versión 1).',
+    supports: [], submitKey: 'ev-s9', createdBy: IDS.s9, createdAt: Timestamp.now(), deletedAt: null,
   })
 
   b.set(adminDb.doc(`xpEvents/${IDS.s1}_${IDS.milestone1}_${IDS.programVersion}`), {
