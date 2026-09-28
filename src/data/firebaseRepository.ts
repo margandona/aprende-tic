@@ -4,7 +4,7 @@
  */
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
-import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
+import { getBytes, ref as storageRef, uploadBytesResumable } from 'firebase/storage'
 import { db, functions, storage } from '../firebase/client'
 import { demo, invalidateSession, session } from '../stores/session'
 import type { SurveyAnswers } from './diagnosisSurvey'
@@ -229,7 +229,7 @@ export interface MissionEvidenceVersion {
 
 export interface MissionDetailData {
   mission: Mission | null
-  milestone: { id: string; title: string; xpValue: number; indicatorCodes: string[]; modalities: string[]; guidance: string } | null
+  milestone: { id: string; title: string; xpValue: number; indicatorCodes: string[]; modalities: string[]; guidance: string; evidenceChecklist: string[] } | null
   deliveryId: string | null
   progress: MissionProgress | null
   evidence: Data | null
@@ -271,6 +271,7 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
         indicatorCodes: (ms.indicatorCodes as string[]) ?? [],
         modalities: (ms.modalities as string[]) ?? ['text'],
         guidance: (ms.guidance as string) ?? '',
+        evidenceChecklist: (ms.evidenceChecklist as string[]) ?? [],
       }
       // Consulta (no getDoc) para no leer una entrega inexistente.
       const dSnap = await getDocs(
@@ -702,6 +703,7 @@ export interface DeliveryReview {
   xpValue: number
   programVersionId: string
   indicatorCodes: string[]
+  evidenceChecklist: string[]
   currentEvidenceId: string | null
   adjustment: { action: string; at: string | null } | null
   evidences: DeliveryEvidenceVersion[]
@@ -796,6 +798,7 @@ export async function fetchDeliveryReview(deliveryId: string): Promise<DeliveryR
     xpValue: (msSnap.data()?.xpValue as number) ?? 0,
     programVersionId,
     indicatorCodes: (msSnap.data()?.indicatorCodes as string[]) ?? [],
+    evidenceChecklist: (msSnap.data()?.evidenceChecklist as string[]) ?? [],
     currentEvidenceId: (d.currentEvidenceId as string | null) ?? null,
     adjustment: d.adjustment ? { action: (d.adjustment as Data).action as string, at: toIso((d.adjustment as Data).at) } : null,
     evidences,
@@ -960,6 +963,12 @@ export async function cleanupExpiredUploads(courseId: string): Promise<number> {
   return (await call({ courseId })).data.removed
 }
 
-export async function evidenceDownloadUrl(storagePath: string): Promise<string> {
-  return getDownloadURL(storageRef(storage, storagePath))
+/**
+ * Descarga autorizada de una evidencia: `getBytes` pasa por las **Storage Rules en cada
+ * solicitud** (vínculo activo, propiedad/curso), a diferencia de una URL con token de larga
+ * duración. Devuelve un Blob efímero en memoria (no compartible como enlace).
+ */
+export async function fetchEvidenceBlob(storagePath: string): Promise<Blob> {
+  const bytes = await getBytes(storageRef(storage, storagePath))
+  return new Blob([bytes])
 }

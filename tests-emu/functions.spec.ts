@@ -126,7 +126,7 @@ describe('Endurecimiento · reserva de archivos y docentes desactivados', () => 
     const s = await studentClient()
     await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
     const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
-    const { deliveryId } = (await start({ milestoneId: IDS.milestone1 })).data
+    const { deliveryId } = (await start({ milestoneId: IDS.milestone2 })).data
     const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
     const r = await reserve({ deliveryId, fileName: 'guia.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
     expect(r.data.path).toContain(r.data.reservationId)
@@ -142,7 +142,7 @@ describe('Endurecimiento · reserva de archivos y docentes desactivados', () => 
     const s = await studentClient()
     await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
     const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
-    const { deliveryId } = (await start({ milestoneId: IDS.milestone1 })).data
+    const { deliveryId } = (await start({ milestoneId: IDS.milestone2 })).data
     const reserve = httpsCallable(s.functions, 'reserveUpload')
     await expect(reserve({ deliveryId, fileName: 'a.exe', contentType: 'application/x-msdownload', sizeBytes: 10 })).rejects.toThrow()
     await expect(reserve({ deliveryId, fileName: 'a.pdf', contentType: 'application/pdf', sizeBytes: 6 * 1024 * 1024 })).rejects.toThrow()
@@ -161,7 +161,7 @@ describe('Endurecimiento · verificación de objeto y reserva', () => {
     const s = await studentClient()
     await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
     const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
-    const { deliveryId } = (await start({ milestoneId: IDS.milestone1 })).data
+    const { deliveryId } = (await start({ milestoneId: IDS.milestone2 })).data
     const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
     const r = (await reserve({ deliveryId, fileName: 'guia.pdf', contentType: 'application/pdf', sizeBytes: 1024 })).data
     return { s, deliveryId, ...r }
@@ -469,10 +469,29 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
     expect((await xpOf(IDS.s4)).size).toBe(1)
   })
 
-  it('valora por estudiante en una entrega de equipo', async () => {
+  it('valora por estudiante en una entrega de equipo, exigiendo contribución propia', async () => {
     const t = await teacherClient(IDS.t1)
     const deliveryId = `${IDS.s1}_${IDS.milestone2}`
-    await httpsCallable(t.functions, 'validateMilestone')({
+    const validate = httpsCallable(t.functions, 'validateMilestone')
+
+    // Sin contribuciones individuales, no se otorga XP por integrante.
+    await expect(
+      validate({
+        deliveryId,
+        assessments: [
+          { enrollmentId: IDS.s1, indicatorCode: 'D1', level: 'achieved' },
+          { enrollmentId: IDS.s2, indicatorCode: 'D1', level: 'developing' },
+        ],
+      }),
+    ).rejects.toThrow()
+
+    // S1 registra su aporte; el docente registra el de S2 (vía equivalente).
+    const s1 = await studentClient()
+    await httpsCallable(s1.functions, 'redeemCode')({ code: IDS.codeS1 })
+    await httpsCallable(s1.functions, 'registerContribution')({ deliveryId, description: 'Redacté la ficha de necesidad.' })
+    await httpsCallable(t.functions, 'registerContribution')({ deliveryId, enrollmentId: IDS.s2, description: 'Aportó la búsqueda de fuentes (papel).' })
+
+    await validate({
       deliveryId,
       assessments: [
         { enrollmentId: IDS.s1, indicatorCode: 'D1', level: 'achieved' },
@@ -482,7 +501,7 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
     expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
     expect((await xpOf(IDS.s1)).size).toBe(1)
     expect((await xpOf(IDS.s2)).size).toBe(1)
-    expect((await adminDb.doc(`assessments/${IDS.s2}_${IDS.milestone2}_D1`).get()).data()?.level).toBe('developing')
+    expect((await adminDb.doc(`deliveries/${deliveryId}/contributors/${IDS.s2}`).get()).data()?.origin).toBe('teacher_equivalent')
   })
 
   it('registra entrega equivalente con apoyos, la deja por revisar y la valida con el mismo XP', async () => {
@@ -641,6 +660,19 @@ describe('I2d � seis misiones, robustez de archivos y XP narrativo', () => {
     const submit = httpsCallable(s.functions, 'submitEvidence')
     const validate = httpsCallable(t.functions, 'validateMilestone')
 
+    // M1 exige el diagnóstico entregado (o barrera técnica). Se registra el diagnóstico primero.
+    await httpsCallable(s.functions, 'saveConditionsSurvey')({
+      answers: {
+        A1: [], A2: '', A3: '', A4: { option: '', other: '' },
+        A5: { created: '', verified: '', explained: '' }, A6: '',
+      },
+    })
+    const { attemptId } = (
+      await httpsCallable<{ kind: string }, { attemptId: string }>(s.functions, 'startDiagnosisAttempt')({ kind: 'pre' })
+    ).data
+    await httpsCallable(s.functions, 'saveDiagnosisResponse')({ attemptId, taskCode: 'T1', responseStatus: 'answered', responseText: 'x', technicalIssue: false, supports: [] })
+    await httpsCallable(s.functions, 'submitDiagnosisAttempt')({ attemptId })
+
     const plan: Array<[string, string[]]> = [
       [IDS.milestone1, ['D1', 'E1']],
       [IDS.milestone2, ['D1']],
@@ -715,5 +747,91 @@ describe('I2d � seis misiones, robustez de archivos y XP narrativo', () => {
     // Segunda ejecuci�n: nada nuevo que limpiar.
     const second = await cleanup({ courseId: IDS.courseX })
     expect(second.data.removed).toBe(0)
+  })
+})
+
+
+describe('I2e � autorizaci�n, modalidades, contribuciones y contrato de M1', () => {
+  async function fresh(code: string, milestoneId: string) {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code })
+    const { deliveryId } = (
+      await httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')({ milestoneId })
+    ).data
+    return { s, deliveryId }
+  }
+
+  it('rechaza entregas, claves y reservas ajenas antes de responder', async () => {
+    const { s: s4, deliveryId } = await fresh(IDS.codeS4, IDS.milestone2)
+    const submit4 = httpsCallable(s4.functions, 'submitEvidence')
+    await submit4({ deliveryId, submitKey: 'own', format: 'text', description: 'x' })
+
+    // Otro estudiante (S6) intenta la entrega/clave de S4: no hay recibo idempotente.
+    const { s: s6, deliveryId: d6 } = await fresh(IDS.codeS6, IDS.milestone2)
+    await expect(
+      httpsCallable(s6.functions, 'submitEvidence')({ deliveryId, submitKey: 'own', format: 'text', description: 'y' }),
+    ).rejects.toThrow()
+
+    // Reserva ajena: S6 crea su reserva; S4 intenta usarla.
+    const r6 = (
+      await httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(
+        s6.functions,
+        'reserveUpload',
+      )({ deliveryId: d6, fileName: 'a.txt', contentType: 'text/plain', sizeBytes: 3 })
+    ).data
+    await adminUpload(r6.path, Buffer.from('abc'), 'text/plain')
+    await expect(
+      submit4({ deliveryId, submitKey: 'k4', format: 'file', description: 'x', reservationId: r6.reservationId }),
+    ).rejects.toThrow()
+    // La reserva ajena queda intacta (no se consume ni se borra).
+    expect((await adminDb.doc(`uploadReservations/${r6.reservationId}`).get()).data()?.state).toBe('reserved')
+  })
+
+  it('aplica las modalidades del hito en el servidor', async () => {
+    const { s, deliveryId } = await fresh(IDS.codeS4, IDS.milestone1) // M1: solo texto
+    await expect(
+      httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'f1', format: 'file', description: 'x' }),
+    ).rejects.toThrow()
+    await expect(
+      httpsCallable(s.functions, 'reserveUpload')({ deliveryId, fileName: 'a.txt', contentType: 'text/plain', sizeBytes: 3 }),
+    ).rejects.toThrow()
+  })
+
+  it('M1 exige diagn�stico entregado o barrera t�cnica', async () => {
+    const { s, deliveryId } = await fresh(IDS.codeS5, IDS.milestone1)
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'm1', format: 'text', description: 'pregunta' })
+    const t = await teacherClient(IDS.t1)
+    const validate = httpsCallable(t.functions, 'validateMilestone')
+    const assessments = [
+      { enrollmentId: IDS.s5, indicatorCode: 'D1', level: 'achieved' },
+      { enrollmentId: IDS.s5, indicatorCode: 'E1', level: 'achieved' },
+    ]
+    // Sin diagn�stico ni barrera, no acredita.
+    await expect(validate({ deliveryId, assessments })).rejects.toThrow()
+
+    // Barrera t�cnica registrada (intento en borrador) habilita la acreditaci�n.
+    await httpsCallable(s.functions, 'saveConditionsSurvey')({
+      answers: { A1: [], A2: '', A3: '', A4: { option: '', other: '' }, A5: { created: '', verified: '', explained: '' }, A6: '' },
+    })
+    const { attemptId } = (
+      await httpsCallable<{ kind: string }, { attemptId: string }>(s.functions, 'startDiagnosisAttempt')({ kind: 'pre' })
+    ).data
+    await httpsCallable(s.functions, 'saveDiagnosisResponse')({ attemptId, taskCode: 'T1', responseStatus: 'not_answered', responseText: '', technicalIssue: true, supports: [] })
+    await validate({ deliveryId, assessments })
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+  })
+
+  it('registra contribuciones individuales y rechaza a quien no pertenece al equipo', async () => {
+    const deliveryId = `${IDS.s1}_${IDS.milestone2}`
+    const s1 = await studentClient()
+    await httpsCallable(s1.functions, 'redeemCode')({ code: IDS.codeS1 })
+    await httpsCallable(s1.functions, 'registerContribution')({ deliveryId, description: 'Redact� la ficha.' })
+    expect((await adminDb.doc(`deliveries/${deliveryId}/contributors/${IDS.s1}`).get()).data()?.origin).toBe('student')
+
+    const s3 = await studentClient() // curso Y, no miembro del equipo
+    await httpsCallable(s3.functions, 'redeemCode')({ code: IDS.codeS3 })
+    await expect(
+      httpsCallable(s3.functions, 'registerContribution')({ deliveryId, description: 'ajena' }),
+    ).rejects.toThrow()
   })
 })

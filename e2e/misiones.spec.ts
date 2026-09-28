@@ -134,4 +134,12 @@ test.describe('I2d · recorrido de las seis misiones', () => {
     await redeem(page, IDS.codeS11)
     await expect(page.getByTestId('journey-xp')).toContainText('20')
   })
+  test('plantillas de las seis misiones accesibles y imprimibles', async ({ page }) => {
+    await redeem(page, IDS.codeS12)
+    await page.goto('/#/estudiante/plantillas')
+    await expect(page.getByRole('heading', { name: 'Plantillas de las misiones' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /M1/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /M6/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Imprimir plantillas' })).toBeVisible()
+  })
 })

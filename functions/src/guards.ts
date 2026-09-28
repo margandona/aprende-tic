@@ -136,6 +136,13 @@ export async function milestoneInCourse(milestoneId: string, courseId: string): 
   return course.data()?.programVersionId === mission.data()!.programVersionId
 }
 
+/** Modalidades permitidas por el hito (texto/archivo). Por defecto, solo texto. */
+export async function milestoneModalities(milestoneId: string): Promise<string[]> {
+  const ms = await db.doc(`milestones/${milestoneId}`).get()
+  const mods = ms.data()?.modalities as string[] | undefined
+  return mods && mods.length > 0 ? mods : ['text']
+}
+
 export async function audit(actorUid: string, role: string, action: string, entity: string, entityId: string, meta: Record<string, unknown> = {}) {
   await db.collection('auditLogs').add({
     actorUid,

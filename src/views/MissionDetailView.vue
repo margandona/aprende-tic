@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAsync } from '../composables/useAsync'
 import {
-  evidenceDownloadUrl,
+  fetchEvidenceBlob,
   fetchMissionDetail,
   reserveUpload,
   startMission,
@@ -175,9 +175,12 @@ async function enviarArchivo(): Promise<void> {
 
 async function verArchivo(path: string): Promise<void> {
   try {
-    window.open(await evidenceDownloadUrl(path), '_blank', 'noopener')
+    // Descarga autorizada por las reglas (se comprueba el vínculo/curso al acceder).
+    const url = URL.createObjectURL(await fetchEvidenceBlob(path))
+    window.open(url, '_blank', 'noopener')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
   } catch {
-    /* sin acceso al archivo */
+    message.value = 'No se pudo abrir el archivo (¿sin autorización?).'
   }
 }
 
@@ -238,6 +241,7 @@ async function enviar(): Promise<void> {
 <template>
   <section aria-labelledby="mission-title" data-testid="mission-detail">
     <p><RouterLink to="/estudiante/misiones">← Volver a misiones</RouterLink></p>
+    <p><RouterLink to="/estudiante/plantillas">Ver plantillas de las misiones</RouterLink></p>
 
     <StatePanel v-if="loading" state="loading" message="Cargando la misión…" />
     <StatePanel v-else-if="error" state="error" :message="error" />
@@ -286,6 +290,12 @@ async function enviar(): Promise<void> {
       <div v-if="editable" class="card">
         <h2>Tu entrega</h2>
         <p v-if="milestone?.guidance" class="hint">{{ milestone.guidance }}</p>
+        <template v-if="milestone?.evidenceChecklist?.length">
+          <p class="hint"><strong>Evidencia mínima del bloque:</strong></p>
+          <ul class="checklist">
+            <li v-for="(c, i) in milestone.evidenceChecklist" :key="i">{{ c }}</li>
+          </ul>
+        </template>
         <p class="hint">
           No incluyas contraseñas ni datos personales. Si no tienes dispositivo, tu docente puede registrar una
           <strong>entrega equivalente</strong> (papel/audio/maqueta) con el mismo criterio de acreditación.
@@ -433,6 +443,12 @@ label {
   border-radius: var(--rt-radius-sm);
   padding: var(--rt-space-2);
   margin: var(--rt-space-2) 0;
+}
+.checklist {
+  margin: var(--rt-space-1) 0 var(--rt-space-2);
+  padding-left: var(--rt-space-4);
+  color: var(--rt-text-muted);
+  font-size: var(--rt-font-size-sm);
 }
 .mode label {
   display: inline-flex;

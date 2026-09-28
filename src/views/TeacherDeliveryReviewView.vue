@@ -4,8 +4,8 @@ import { useRoute } from 'vue-router'
 import { useAsync } from '../composables/useAsync'
 import {
   correctAssessment,
-  evidenceDownloadUrl,
   fetchDeliveryReview,
+  fetchEvidenceBlob,
   reopenMilestone,
   requestAdjustment,
   restoreXp,
@@ -148,9 +148,11 @@ async function reabrir(): Promise<void> {
 
 async function verArchivo(path: string): Promise<void> {
   try {
-    window.open(await evidenceDownloadUrl(path), '_blank', 'noopener')
+    const url = URL.createObjectURL(await fetchEvidenceBlob(path))
+    window.open(url, '_blank', 'noopener')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
   } catch {
-    submitError.value = 'No se pudo abrir el archivo.'
+    submitError.value = 'No se pudo abrir el archivo (¿sin autorización?).'
   }
 }
 
@@ -233,6 +235,12 @@ async function cambiarXp(xpEventId: string, revoked: boolean): Promise<void> {
       <section class="card" aria-labelledby="val-h">
         <h2 id="val-h">Valoración por indicador</h2>
         <p class="hint">«No evaluado» es un estado distinto de una valoración baja.</p>
+        <template v-if="data.evidenceChecklist.length">
+          <p class="hint"><strong>Verifica la evidencia mínima del bloque antes de acreditar el XP:</strong></p>
+          <ul class="checklist">
+            <li v-for="(c, i) in data.evidenceChecklist" :key="i">{{ c }}</li>
+          </ul>
+        </template>
         <fieldset v-for="m in data.members" :key="m.enrollmentId" class="member">
           <legend>{{ m.pseudonym }}</legend>
           <div v-for="code in data.indicatorCodes" :key="code" class="indicator-block">
@@ -361,6 +369,12 @@ label {
   padding: var(--rt-space-2);
   border-radius: var(--rt-radius-sm);
   font-weight: 600;
+}
+.checklist {
+  margin: var(--rt-space-1) 0 var(--rt-space-2);
+  padding-left: var(--rt-space-4);
+  color: var(--rt-text-muted);
+  font-size: var(--rt-font-size-sm);
 }
 .error {
   color: #7f1d1d;

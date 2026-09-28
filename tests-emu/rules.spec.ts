@@ -277,9 +277,16 @@ describe('Storage Rules · reserva real de archivos', () => {
     await assertSucceeds(up(U.s1, p, 3, 'text/plain'))
   })
 
-  it('el docente del curso lee el archivo; el de otro curso no', async () => {
+  it('el docente del curso lee el archivo; el de otro curso y otros estudiantes no', async () => {
     const p = path(IDS.courseX, IDS.s1, D, RES.valid, 'guia.txt')
     await assertSucceeds(getBytes(ref(st(IDS.t1), p)))
     await assertFails(getBytes(ref(st(IDS.t2), p)))
+    // Otro estudiante del mismo curso no lee la evidencia individual ajena.
+    await assertFails(getBytes(ref(st(U.s2), p)))
+    // Con el vínculo revocado, el propio estudiante tampoco lee (autorización por acceso).
+    await adminDb.doc(`sessionBindings/${U.s1}`).update({ state: 'revoked' })
+    await assertFails(getBytes(ref(st(U.s1), p)))
+    await adminDb.doc(`sessionBindings/${U.s1}`).update({ state: 'active' })
+    await assertSucceeds(getBytes(ref(st(U.s1), p)))
   })
 })

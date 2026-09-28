@@ -6,6 +6,7 @@ import MissionsView from '../views/MissionsView.vue'
 import MissionDetailView from '../views/MissionDetailView.vue'
 import LearningsView from '../views/LearningsView.vue'
 import DiagnosisView from '../views/DiagnosisView.vue'
+import TemplatesView from '../views/TemplatesView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import TeacherPanelView from '../views/TeacherPanelView.vue'
 import TeacherReviewView from '../views/TeacherReviewView.vue'
@@ -44,6 +45,7 @@ export const routes: RouteRecordRaw[] = [
     meta: { role: 'student' },
   },
   { path: '/estudiante/ajustes', name: 'estudiante-ajustes', component: SettingsView, meta: { role: 'student' } },
+  { path: '/estudiante/plantillas', name: 'estudiante-plantillas', component: TemplatesView, meta: { role: 'student' } },
   { path: '/docente', redirect: '/docente/panel', meta: { role: 'teacher' } },
   { path: '/docente/panel', name: 'docente-panel', component: TeacherPanelView, meta: { role: 'teacher' } },
   {

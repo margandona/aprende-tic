@@ -12,6 +12,7 @@ import {
   db,
   getActiveBinding,
   milestoneInCourse,
+  milestoneModalities,
   newId,
 } from './guards'
 
@@ -73,6 +74,9 @@ export const reserveUpload = onCall(async (request) => {
   if (!['not_started', 'in_progress'].includes(d.state as string)) {
     throw new HttpsError('failed-precondition', 'La entrega no admite archivos en su estado actual.')
   }
+  if (!(await milestoneModalities(d.milestoneId as string)).includes('file')) {
+    throw new HttpsError('failed-precondition', 'El hito no admite entregas en formato archivo.')
+  }
   if (!ALLOWED_MIME.includes(contentType)) {
     throw new HttpsError('invalid-argument', 'Tipo de archivo no permitido.')
   }
@@ -105,6 +109,32 @@ export const reserveUpload = onCall(async (request) => {
   return { reservationId, path: storagePath, expiresAt: expiresAt.toMillis() }
 })
 
+/**
+ * Limpieza de una reserva redundante (reintento con la misma `submitKey`).
+ * Solo actúa si la reserva pertenece al mismo estudiante y entrega. Marca `consumed`
+ * únicamente tras confirmar que el objeto ya no existe; ante un fallo transitorio la deja
+ * `reserved` para reintentar. No lanza: es best-effort.
+ */
+async function cleanupRedundantReservation(reservationId: string, deliveryId: string, enrollmentId: string): Promise<void> {
+  try {
+    const rRef = db.doc(`uploadReservations/${reservationId}`)
+    const rSnap = await rRef.get()
+    const r = rSnap.data()
+    if (!rSnap.exists || !r) return
+    if (r.deliveryId !== deliveryId || r.ownerEnrollmentId !== enrollmentId || r.state !== 'reserved') return
+    if (r.storagePath) {
+      const file = getStorage().bucket().file(r.storagePath as string)
+      const [exists] = await file.exists()
+      if (exists) await file.delete()
+      const [stillExists] = await file.exists()
+      if (stillExists) return // no confirmado: se deja reintentable
+    }
+    await rRef.update({ state: 'consumed', consumedAt: Timestamp.now() })
+  } catch {
+    /* fallo transitorio: la reserva queda `reserved` y se reintenta después */
+  }
+}
+
 /** Envío idempotente de evidencia digital (submit_key) + consumo de reserva opcional. */
 export const submitEvidence = onCall(async (request) => {
   const uid = assertSignedIn(request)
@@ -116,22 +146,27 @@ export const submitEvidence = onCall(async (request) => {
   const reservationId = request.data?.reservationId ? String(request.data.reservationId) : null
   if (!deliveryId || !submitKey) throw new HttpsError('invalid-argument', 'deliveryId y submitKey son obligatorios.')
 
-  // Idempotencia (camino rápido): el mismo submit_key devuelve el recibo sin duplicar la evidencia.
+  // ── Autorización SIEMPRE antes de cualquier respuesta o mutación ──────────
+  const deliveryRef = db.doc(`deliveries/${deliveryId}`)
+  const deliverySnap = await deliveryRef.get()
+  if (!deliverySnap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
+  const delivery = deliverySnap.data()!
+  if (delivery.ownerEnrollmentId !== binding.enrollmentId || delivery.courseId !== binding.courseId) {
+    throw new HttpsError('permission-denied', 'La entrega no pertenece a tu vínculo activo.')
+  }
+
+  // ── Modalidad permitida por el hito (se aplica en el servidor, no solo en la UI) ──
+  const modality = format === 'file' ? 'file' : 'text'
+  const modalities = await milestoneModalities(delivery.milestoneId as string)
+  if (!modalities.includes(modality)) {
+    throw new HttpsError('failed-precondition', `El hito no admite entregas en formato «${modality}».`)
+  }
+
+  // ── Idempotencia (ya autorizada la entrega): recibo sin duplicar ──────────
   const existingEvidence = await db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`).get()
   if (existingEvidence.exists) {
-    // Si el reintento creó una reserva nueva, se limpia su objeto para no dejar huérfanos.
-    if (reservationId) {
-      const rSnap = await db.doc(`uploadReservations/${reservationId}`).get()
-      const r = rSnap.data()
-      if (rSnap.exists && r && r.state === 'reserved' && r.storagePath) {
-        try {
-          await getStorage().bucket().file(r.storagePath as string).delete()
-        } catch {
-          /* el objeto no existe: nada que borrar */
-        }
-        await rSnap.ref.update({ state: 'consumed', consumedAt: Timestamp.now() })
-      }
-    }
+    // Limpieza best-effort de una reserva redundante del MISMO estudiante y entrega.
+    if (reservationId) await cleanupRedundantReservation(reservationId, deliveryId, binding.enrollmentId)
     return { evidenceId: submitKey, version: existingEvidence.data()!.version as number, reused: true }
   }
 
@@ -142,8 +177,13 @@ export const submitEvidence = onCall(async (request) => {
     const rSnap = await db.doc(`uploadReservations/${reservationId}`).get()
     if (!rSnap.exists) throw new HttpsError('failed-precondition', 'Reserva de archivo inválida.')
     const r = rSnap.data()!
-    if (r.deliveryId !== deliveryId || r.ownerEnrollmentId !== binding.enrollmentId) {
-      throw new HttpsError('failed-precondition', 'Reserva de archivo inválida.')
+    if (
+      r.deliveryId !== deliveryId ||
+      r.ownerEnrollmentId !== binding.enrollmentId ||
+      r.enrollmentId !== binding.enrollmentId ||
+      r.courseId !== binding.courseId
+    ) {
+      throw new HttpsError('permission-denied', 'La reserva no pertenece a tu entrega.')
     }
     if (r.state !== 'reserved') throw new HttpsError('failed-precondition', 'La reserva no está disponible.')
     if ((r.expiresAt as Timestamp).toMillis() <= Date.now()) {
@@ -165,17 +205,16 @@ export const submitEvidence = onCall(async (request) => {
   }
 
   return db.runTransaction(async (tx: Transaction) => {
-    const deliveryRef = db.doc(`deliveries/${deliveryId}`)
     const evidenceRef = db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`)
     const reservationRef = reservationId ? db.doc(`uploadReservations/${reservationId}`) : null
 
-    const deliverySnap = await tx.get(deliveryRef)
+    const dSnap = await tx.get(deliveryRef)
     const evidenceSnap = await tx.get(evidenceRef)
     const reservationSnap = reservationRef ? await tx.get(reservationRef) : null
 
-    if (!deliverySnap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
-    const d = deliverySnap.data()!
-    if (d.ownerEnrollmentId !== binding.enrollmentId) {
+    if (!dSnap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
+    const d = dSnap.data()!
+    if (d.ownerEnrollmentId !== binding.enrollmentId || d.courseId !== binding.courseId) {
       throw new HttpsError('permission-denied', 'Solo el propietario puede entregar.')
     }
     if (evidenceSnap.exists) {
@@ -186,7 +225,14 @@ export const submitEvidence = onCall(async (request) => {
     }
     if (reservationRef) {
       const r = reservationSnap?.data()
-      if (!reservationSnap?.exists || !r || r.state !== 'reserved' || (r.expiresAt as Timestamp).toMillis() <= Date.now()) {
+      if (
+        !reservationSnap?.exists ||
+        !r ||
+        r.deliveryId !== deliveryId ||
+        r.ownerEnrollmentId !== binding.enrollmentId ||
+        r.state !== 'reserved' ||
+        (r.expiresAt as Timestamp).toMillis() <= Date.now()
+      ) {
         throw new HttpsError('failed-precondition', 'Reserva de archivo no disponible.')
       }
     }
@@ -288,6 +334,50 @@ export const registerEquivalentEvidence = onCall(async (request) => {
 
   await audit(uid, 'teacher', 'register_equivalent_evidence', 'delivery', deliveryId)
   return { deliveryId, ...result }
+})
+
+/**
+ * Contribución individual en una entrega de equipo (requisito para el XP por integrante).
+ * - Un integrante del equipo registra su **propio** aporte (vínculo activo).
+ * - El docente del curso puede registrar el aporte de un integrante (vía equivalente).
+ */
+export const registerContribution = onCall(async (request) => {
+  const uid = assertSignedIn(request)
+  const deliveryId = String(request.data?.deliveryId ?? '')
+  const text = String(request.data?.description ?? '').trim().slice(0, 1000)
+  const target = request.data?.enrollmentId ? String(request.data.enrollmentId) : null
+  if (!text) throw new HttpsError('invalid-argument', 'Describe tu contribución.')
+
+  const dSnap = await db.doc(`deliveries/${deliveryId}`).get()
+  if (!dSnap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
+  const d = dSnap.data()!
+  if (d.scope !== 'team' || !d.teamId) {
+    throw new HttpsError('failed-precondition', 'La contribución individual solo aplica a entregas de equipo.')
+  }
+
+  let enrollmentId: string
+  let origin: 'student' | 'teacher_equivalent'
+  if (target) {
+    await assertTeacherOfCourse(uid, d.courseId as string)
+    enrollmentId = target
+    origin = 'teacher_equivalent'
+  } else {
+    const binding = await getActiveBinding(uid)
+    enrollmentId = binding.enrollmentId
+    origin = 'student'
+  }
+
+  const member = await db.doc(`teams/${d.teamId as string}/members/${enrollmentId}`).get()
+  if (!member.exists) throw new HttpsError('permission-denied', 'La matrícula no pertenece al equipo.')
+
+  await db.doc(`deliveries/${deliveryId}/contributors/${enrollmentId}`).set({
+    enrollmentId,
+    text,
+    origin,
+    createdBy: uid,
+    createdAt: Timestamp.now(),
+  })
+  return { status: 'ok' }
 })
 
 /**

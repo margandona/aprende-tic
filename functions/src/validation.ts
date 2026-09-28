@@ -115,6 +115,32 @@ export const validateMilestone = onCall(async (request) => {
       for (const m of teamMembers) {
         if (!byEnrollment.has(m)) throw new HttpsError('failed-precondition', 'Faltan integrantes del equipo.')
       }
+      // Fase 7: el XP por integrante exige contribución propia registrada.
+      for (const enr of byEnrollment.keys()) {
+        const cSnap = await tx.get(db.doc(`deliveries/${deliveryId}/contributors/${enr}`))
+        if (!cSnap.exists) {
+          throw new HttpsError('failed-precondition', `Falta la contribución individual de ${enr}.`)
+        }
+      }
+    }
+
+    // Fase 7 (M1): «diagnóstico entregado y pregunta inicial». El puntaje no afecta el XP,
+    // pero sí debe existir el registro del intento o una barrera técnica declarada.
+    if (milestone.requiresDiagnosis === true) {
+      for (const enr of byEnrollment.keys()) {
+        const survey = await tx.get(db.doc(`conditionsSurveys/${enr}`))
+        const attempt = await tx.get(db.doc(`diagnosisAttempts/${enr}_pre`))
+        const barrier = await tx.get(
+          db.collection(`diagnosisAttempts/${enr}_pre/responses`).where('technicalIssue', '==', true).limit(1),
+        )
+        const submitted = attempt.exists && attempt.data()?.status === 'submitted'
+        if (!survey.exists || (!submitted && barrier.empty)) {
+          throw new HttpsError(
+            'failed-precondition',
+            'Falta el diagnóstico entregado o una barrera técnica registrada para acreditar el hito.',
+          )
+        }
+      }
     }
 
     // Escrituras.
