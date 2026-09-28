@@ -7,6 +7,18 @@ beforeEach(async () => {
   await seedSynthetic()
 })
 
+/**
+ * Confirma por el docente todos los ítems de la evidencia mínima del hito para la versión
+ * vigente de una entrega (requisito de `validateMilestone` en M2/M5).
+ */
+async function confirmChecklist(t: { functions: unknown }, deliveryId: string, milestoneId: string): Promise<void> {
+  const ms = await adminDb.doc(`milestones/${milestoneId}`).get()
+  const items = (ms.data()?.evidenceChecklist as string[]) ?? []
+  for (let i = 0; i < items.length; i++) {
+    await httpsCallable(t.functions as never, 'confirmChecklistItem')({ deliveryId, itemIndex: i })
+  }
+}
+
 describe('Identidad · canje, revocación y regeneración', () => {
   it('el canje válido crea un vínculo activo', async () => {
     const s = await studentClient()
@@ -419,6 +431,7 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
   it('valida el hito, otorga XP una sola vez y guarda fortaleza/siguiente paso', async () => {
     const t = await teacherClient(IDS.t1)
     const validate = httpsCallable(t.functions, 'validateMilestone')
+    await confirmChecklist(t, S7_DELIVERY, IDS.milestone2)
     await validate({
       deliveryId: S7_DELIVERY,
       comment: 'Buen contraste.',
@@ -442,6 +455,7 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
     await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'ne1', format: 'text', description: 'x' })
 
     const t = await teacherClient(IDS.t1)
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({
       deliveryId,
       assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'not_evaluated' }],
@@ -462,6 +476,7 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
     expect((await adminDb.collection('deliveryHistory').where('deliveryId', '==', deliveryId).get()).size).toBe(1)
 
     await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'v2', format: 'text', description: 'v2' })
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'achieved' }] })
     expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
     const evs = await adminDb.collection(`deliveries/${deliveryId}/evidence`).get()
@@ -490,6 +505,7 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
     await httpsCallable(s1.functions, 'redeemCode')({ code: IDS.codeS1 })
     await httpsCallable(s1.functions, 'registerContribution')({ deliveryId, description: 'Redacté la ficha de necesidad.' })
     await httpsCallable(t.functions, 'registerContribution')({ deliveryId, enrollmentId: IDS.s2, description: 'Aportó la búsqueda de fuentes (papel).' })
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
 
     await validate({
       deliveryId,
@@ -524,6 +540,7 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
     expect(ev.data()?.origin).toBe('teacher_equivalent')
     expect(ev.data()?.supports).toEqual(['reading', 'extra_time'])
 
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s8, indicatorCode: 'D1', level: 'achieved' }] })
     expect((await xpOf(IDS.s8)).size).toBe(1)
     expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
@@ -542,6 +559,7 @@ describe('Revisión de misión · validación, XP, ajuste y equivalencia (I2b)',
 
   it('retira y reinstaura el XP sin duplicar el evento', async () => {
     const t = await teacherClient(IDS.t1)
+    await confirmChecklist(t, S7_DELIVERY, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({ deliveryId: S7_DELIVERY, assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'achieved' }] })
     const xpSnap = await xpOf(IDS.s7)
     const xpEventId = xpSnap.docs[0].id
@@ -574,6 +592,7 @@ describe('I2c � reapertura segura, no evaluado y limpieza de reservas', () => 
     await expect(httpsCallable(t.functions, 'reopenMilestone')({ deliveryId })).rejects.toThrow()
 
     await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'rc1', format: 'text', description: 'x' })
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'achieved' }] })
 
     await httpsCallable(t.functions, 'reopenMilestone')({ deliveryId, action: 'Ajusta la fuente.' })
@@ -583,6 +602,7 @@ describe('I2c � reapertura segura, no evaluado y limpieza de reservas', () => 
     expect((await adminDb.collection('deliveryHistory').where('deliveryId', '==', deliveryId).get()).size).toBe(1)
 
     await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'rc2', format: 'text', description: 'y' })
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({ deliveryId, assessments: [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'achieved' }] })
     const xp = await adminDb.collection('xpEvents').where('enrollmentId', '==', IDS.s4).where('milestoneId', '==', IDS.milestone2).get()
     expect(xp.size).toBe(1)
@@ -595,6 +615,7 @@ describe('I2c � reapertura segura, no evaluado y limpieza de reservas', () => 
 
   it('acredita el hito con todo �no evaluado� sin convertir la competencia en 0', async () => {
     const t = await teacherClient(IDS.t1)
+    await confirmChecklist(t, `${IDS.s7}_${IDS.milestone2}`, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({
       deliveryId: `${IDS.s7}_${IDS.milestone2}`,
       assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'not_evaluated' }],
@@ -608,6 +629,7 @@ describe('I2c � reapertura segura, no evaluado y limpieza de reservas', () => 
 
   it('marca competenceObserved=true cuando hay alguna observaci�n', async () => {
     const t = await teacherClient(IDS.t1)
+    await confirmChecklist(t, `${IDS.s7}_${IDS.milestone2}`, IDS.milestone2)
     await httpsCallable(t.functions, 'validateMilestone')({
       deliveryId: `${IDS.s7}_${IDS.milestone2}`,
       assessments: [{ enrollmentId: IDS.s7, indicatorCode: 'D1', level: 'developing' }],
@@ -684,6 +706,7 @@ describe('I2d � seis misiones, robustez de archivos y XP narrativo', () => {
     for (const [milestoneId, indicators] of plan) {
       const { deliveryId } = (await start({ milestoneId })).data
       await submit({ deliveryId, submitKey: `k-${milestoneId}`, format: 'text', description: 'entrega' })
+      await confirmChecklist(t, deliveryId, milestoneId)
       await validate({
         deliveryId,
         assessments: indicators.map((code) => ({ enrollmentId: IDS.s4, indicatorCode: code, level: 'achieved' })),
@@ -833,5 +856,143 @@ describe('I2e � autorizaci�n, modalidades, contribuciones y contrato de M1',
     await expect(
       httpsCallable(s3.functions, 'registerContribution')({ deliveryId, description: 'ajena' }),
     ).rejects.toThrow()
+  })
+})
+
+
+describe('I2f � contratos cerrados: evidencia m�nima, aportes y limpieza', () => {
+  async function fresh(code: string, milestoneId: string) {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code })
+    const { deliveryId } = (
+      await httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')({ milestoneId })
+    ).data
+    return { s, deliveryId }
+  }
+
+  it('exige confirmar la evidencia m�nima antes de validar M2 y se reinicia con una nueva versi�n', async () => {
+    const { s, deliveryId } = await fresh(IDS.codeS4, IDS.milestone2)
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'v1', format: 'text', description: 'v1' })
+    const t = await teacherClient(IDS.t1)
+    const validate = httpsCallable(t.functions, 'validateMilestone')
+    const assessments = [{ enrollmentId: IDS.s4, indicatorCode: 'D1', level: 'achieved' }]
+
+    // Sin confirmar ? no valida.
+    await expect(validate({ deliveryId, assessments })).rejects.toThrow()
+
+    // Un estudiante no puede confirmar.
+    await expect(httpsCallable(s.functions, 'confirmChecklistItem')({ deliveryId, itemIndex: 0 })).rejects.toThrow()
+
+    // Confirmaci�n parcial ? sigue sin validar.
+    await httpsCallable(t.functions, 'confirmChecklistItem')({ deliveryId, itemIndex: 0 })
+    await expect(validate({ deliveryId, assessments })).rejects.toThrow()
+
+    // Confirmaci�n completa ? valida; queda registro de qui�n y cu�ndo.
+    await httpsCallable(t.functions, 'confirmChecklistItem')({ deliveryId, itemIndex: 1 })
+    const confs = await adminDb.collection(`deliveries/${deliveryId}/checklistConfirmations`).get()
+    expect(confs.size).toBe(2)
+    expect(confs.docs[0].data().confirmedBy).toBe(IDS.t1)
+    expect(confs.docs[0].data().evidenceId).toBe('v1')
+    await validate({ deliveryId, assessments })
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+
+    // Nueva versi�n: las confirmaciones de la versi�n anterior no cuentan.
+    await httpsCallable(t.functions, 'reopenMilestone')({ deliveryId, action: 'Ampl�a el contraste.' })
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'v2', format: 'text', description: 'v2' })
+    await expect(validate({ deliveryId, assessments })).rejects.toThrow()
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
+    await validate({ deliveryId, assessments })
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+  })
+
+  it('registerContribution comprueba curso, estado, versi�n y no altera un XP validado', async () => {
+    const t = await teacherClient(IDS.t1)
+    const deliveryId = `${IDS.s1}_${IDS.milestone2}`
+
+    // Estudiante de otro curso no registra.
+    const s3 = await studentClient()
+    await httpsCallable(s3.functions, 'redeemCode')({ code: IDS.codeS3 })
+    await expect(httpsCallable(s3.functions, 'registerContribution')({ deliveryId, description: 'ajena' })).rejects.toThrow()
+
+    // Aporte vinculado a la versi�n vigente y con historial al cambiar.
+    const s1 = await studentClient()
+    await httpsCallable(s1.functions, 'redeemCode')({ code: IDS.codeS1 })
+    await httpsCallable(s1.functions, 'registerContribution')({ deliveryId, description: 'Aporte 1' })
+    expect((await adminDb.doc(`deliveries/${deliveryId}/contributors/${IDS.s1}`).get()).data()?.evidenceId).toBe('ev-team')
+    await httpsCallable(s1.functions, 'registerContribution')({ deliveryId, description: 'Aporte 2' })
+    const hist = await adminDb.collection('deliveryHistory').where('deliveryId', '==', deliveryId).where('kind', '==', 'contribution').get()
+    expect(hist.size).toBe(1)
+    expect(hist.docs[0].data().previous).toBe('Aporte 1')
+
+    await httpsCallable(t.functions, 'registerContribution')({ deliveryId, enrollmentId: IDS.s2, description: 'Aporte de S2 (papel).' })
+    await confirmChecklist(t, deliveryId, IDS.milestone2)
+    await httpsCallable(t.functions, 'validateMilestone')({
+      deliveryId,
+      assessments: [
+        { enrollmentId: IDS.s1, indicatorCode: 'D1', level: 'achieved' },
+        { enrollmentId: IDS.s2, indicatorCode: 'D1', level: 'achieved' },
+      ],
+    })
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('achieved')
+
+    // Tras validar, no se altera el sustento del XP.
+    await expect(httpsCallable(s1.functions, 'registerContribution')({ deliveryId, description: 'tard�o' })).rejects.toThrow()
+  })
+
+  it('la limpieza redundante no toca una reserva referenciada por otra evidencia', async () => {
+    const { s, deliveryId } = await fresh(IDS.codeS4, IDS.milestone2)
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+    const r1 = (await reserve({ deliveryId, fileName: 'a.txt', contentType: 'text/plain', sizeBytes: 3 })).data
+    await adminUpload(r1.path, Buffer.from('abc'), 'text/plain')
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'rk', format: 'file', description: 'a', reservationId: r1.reservationId })
+
+    // Reserva redundante creada por el cliente, referenciada por otra evidencia.
+    const r2 = { reservationId: 'res-ref', path: `courses/${IDS.courseX}/enrollments/${IDS.s4}/deliveries/${deliveryId}/uploads/res-ref/b.txt` }
+    await adminDb.doc(`uploadReservations/${r2.reservationId}`).set({
+      courseId: IDS.courseX, enrollmentId: IDS.s4, deliveryId, ownerEnrollmentId: IDS.s4,
+      fileName: 'b.txt', contentType: 'text/plain', sizeBytes: 3, storagePath: r2.path,
+      state: 'reserved', createdBy: s.uid, createdAt: Timestamp.now(), expiresAt: Timestamp.fromMillis(Date.now() + 60000),
+    })
+    await adminUpload(r2.path, Buffer.from('xyz'), 'text/plain')
+    await adminDb.doc(`deliveries/${deliveryId}/evidence/other-ref`).set({
+      version: 99, origin: 'student_digital', format: 'file', description: 'referencia', reservationId: r2.reservationId,
+      createdBy: s.uid, createdAt: Timestamp.now(), deletedAt: null,
+    })
+
+    const reused = await httpsCallable<{ deliveryId: string; submitKey: string; format: string; description: string; reservationId: string }, { reused: boolean }>(s.functions, 'submitEvidence')({
+      deliveryId, submitKey: 'rk', format: 'file', description: 'b', reservationId: r2.reservationId,
+    })
+    expect(reused.data.reused).toBe(true)
+    // No se consume ni se borra: la reserva est� referenciada por otra evidencia.
+    expect((await adminDb.doc(`uploadReservations/${r2.reservationId}`).get()).data()?.state).toBe('reserved')
+    const [exists] = await getStorage().bucket(`${PROJECT}.appspot.com`).file(r2.path).exists()
+    expect(exists).toBe(true)
+  })
+
+  it('dos reintentos concurrentes con la misma clave limpian la reserva redundante una sola vez', async () => {
+    const { s, deliveryId } = await fresh(IDS.codeS4, IDS.milestone2)
+    const reserve = httpsCallable<{ deliveryId: string; fileName: string; contentType: string; sizeBytes: number }, { reservationId: string; path: string }>(s.functions, 'reserveUpload')
+    const r1 = (await reserve({ deliveryId, fileName: 'a.txt', contentType: 'text/plain', sizeBytes: 3 })).data
+    await adminUpload(r1.path, Buffer.from('abc'), 'text/plain')
+    await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'rk', format: 'file', description: 'a', reservationId: r1.reservationId })
+
+    const r2 = { reservationId: 'res-conc', path: `courses/${IDS.courseX}/enrollments/${IDS.s4}/deliveries/${deliveryId}/uploads/res-conc/c.txt` }
+    await adminDb.doc(`uploadReservations/${r2.reservationId}`).set({
+      courseId: IDS.courseX, enrollmentId: IDS.s4, deliveryId, ownerEnrollmentId: IDS.s4,
+      fileName: 'c.txt', contentType: 'text/plain', sizeBytes: 3, storagePath: r2.path,
+      state: 'reserved', createdBy: s.uid, createdAt: Timestamp.now(), expiresAt: Timestamp.fromMillis(Date.now() + 60000),
+    })
+    await adminUpload(r2.path, Buffer.from('qqq'), 'text/plain')
+
+    const submit = httpsCallable(s.functions, 'submitEvidence')
+    const results = await Promise.allSettled([
+      submit({ deliveryId, submitKey: 'rk', format: 'file', description: 'b', reservationId: r2.reservationId }),
+      submit({ deliveryId, submitKey: 'rk', format: 'file', description: 'b', reservationId: r2.reservationId }),
+    ])
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true)
+    expect((await adminDb.collection(`deliveries/${deliveryId}/evidence`).get()).size).toBe(1)
+    expect((await adminDb.doc(`uploadReservations/${r2.reservationId}`).get()).data()?.state).toBe('consumed')
+    const [exists] = await getStorage().bucket(`${PROJECT}.appspot.com`).file(r2.path).exists()
+    expect(exists).toBe(false)
   })
 })

@@ -31,6 +31,12 @@ describe('Concurrencia · reintentos simultáneos', () => {
     await httpsCallable(s.functions, 'submitEvidence')({ deliveryId, submitKey: 'c2', format: 'text', description: 'x' })
 
     const t = await teacherClient(IDS.t1)
+    // Evidencia mínima del bloque (M2): se confirma antes de validar.
+    const ms = await adminDb.doc(`milestones/${IDS.milestone2}`).get()
+    const items = (ms.data()?.evidenceChecklist as string[]) ?? []
+    for (let i = 0; i < items.length; i++) {
+      await httpsCallable(t.functions, 'confirmChecklistItem')({ deliveryId, itemIndex: i })
+    }
     const validate = httpsCallable(t.functions, 'validateMilestone')
     const payload = { deliveryId, assessments: [{ indicatorCode: 'D1', level: 'achieved' }], comment: 'x' }
 

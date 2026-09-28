@@ -111,17 +111,37 @@ export const reserveUpload = onCall(async (request) => {
 
 /**
  * Limpieza de una reserva redundante (reintento con la misma `submitKey`).
- * Solo actúa si la reserva pertenece al mismo estudiante y entrega. Marca `consumed`
- * únicamente tras confirmar que el objeto ya no existe; ante un fallo transitorio la deja
- * `reserved` para reintentar. No lanza: es best-effort.
+ * Solo actúa si la reserva pertenece al **mismo estudiante, entrega y curso** del vínculo y
+ * **no está referenciada por otra evidencia**. Marca `consumed` únicamente tras confirmar que
+ * el objeto ya no existe; ante un fallo transitorio la deja `reserved` para reintentar.
  */
-async function cleanupRedundantReservation(reservationId: string, deliveryId: string, enrollmentId: string): Promise<void> {
+async function cleanupRedundantReservation(
+  reservationId: string,
+  deliveryId: string,
+  enrollmentId: string,
+  courseId: string,
+): Promise<void> {
   try {
     const rRef = db.doc(`uploadReservations/${reservationId}`)
     const rSnap = await rRef.get()
     const r = rSnap.data()
     if (!rSnap.exists || !r) return
-    if (r.deliveryId !== deliveryId || r.ownerEnrollmentId !== enrollmentId || r.state !== 'reserved') return
+    if (
+      r.deliveryId !== deliveryId ||
+      r.ownerEnrollmentId !== enrollmentId ||
+      r.enrollmentId !== enrollmentId ||
+      r.courseId !== courseId ||
+      r.state !== 'reserved'
+    ) {
+      return
+    }
+    // No tocar una reserva ya referenciada por otra evidencia (sustento de un envío previo).
+    const refs = await db
+      .collection(`deliveries/${deliveryId}/evidence`)
+      .where('reservationId', '==', reservationId)
+      .limit(1)
+      .get()
+    if (!refs.empty) return
     if (r.storagePath) {
       const file = getStorage().bucket().file(r.storagePath as string)
       const [exists] = await file.exists()
@@ -165,8 +185,8 @@ export const submitEvidence = onCall(async (request) => {
   // ── Idempotencia (ya autorizada la entrega): recibo sin duplicar ──────────
   const existingEvidence = await db.doc(`deliveries/${deliveryId}/evidence/${submitKey}`).get()
   if (existingEvidence.exists) {
-    // Limpieza best-effort de una reserva redundante del MISMO estudiante y entrega.
-    if (reservationId) await cleanupRedundantReservation(reservationId, deliveryId, binding.enrollmentId)
+    // Limpieza best-effort de una reserva redundante del MISMO estudiante, entrega y curso.
+    if (reservationId) await cleanupRedundantReservation(reservationId, deliveryId, binding.enrollmentId, binding.courseId)
     return { evidenceId: submitKey, version: existingEvidence.data()!.version as number, reused: true }
   }
 
@@ -338,8 +358,11 @@ export const registerEquivalentEvidence = onCall(async (request) => {
 
 /**
  * Contribución individual en una entrega de equipo (requisito para el XP por integrante).
- * - Un integrante del equipo registra su **propio** aporte (vínculo activo).
- * - El docente del curso puede registrar el aporte de un integrante (vía equivalente).
+ * - Un integrante registra su **propio** aporte; el docente puede registrar el de un integrante
+ *   (vía equivalente).
+ * - Se comprueba curso del vínculo, pertenencia al equipo, estado permitido y se vincula a la
+ *   **versión vigente** de la evidencia. No se altera el sustento de un XP ya validado
+ *   (entrega `achieved`) y se conserva historial de cambios.
  */
 export const registerContribution = onCall(async (request) => {
   const uid = assertSignedIn(request)
@@ -354,6 +377,12 @@ export const registerContribution = onCall(async (request) => {
   if (d.scope !== 'team' || !d.teamId) {
     throw new HttpsError('failed-precondition', 'La contribución individual solo aplica a entregas de equipo.')
   }
+  if (d.state === 'achieved') {
+    throw new HttpsError('failed-precondition', 'La entrega ya fue validada; reábrela para cambiar el aporte.')
+  }
+  if (d.state !== 'pending_review' && d.state !== 'in_progress') {
+    throw new HttpsError('failed-precondition', 'La entrega no admite aportes en su estado actual.')
+  }
 
   let enrollmentId: string
   let origin: 'student' | 'teacher_equivalent'
@@ -363,6 +392,9 @@ export const registerContribution = onCall(async (request) => {
     origin = 'teacher_equivalent'
   } else {
     const binding = await getActiveBinding(uid)
+    if (binding.courseId !== d.courseId) {
+      throw new HttpsError('permission-denied', 'La entrega no pertenece al curso de tu vínculo.')
+    }
     enrollmentId = binding.enrollmentId
     origin = 'student'
   }
@@ -370,12 +402,68 @@ export const registerContribution = onCall(async (request) => {
   const member = await db.doc(`teams/${d.teamId as string}/members/${enrollmentId}`).get()
   if (!member.exists) throw new HttpsError('permission-denied', 'La matrícula no pertenece al equipo.')
 
-  await db.doc(`deliveries/${deliveryId}/contributors/${enrollmentId}`).set({
-    enrollmentId,
-    text,
-    origin,
-    createdBy: uid,
-    createdAt: Timestamp.now(),
+  const ref = db.doc(`deliveries/${deliveryId}/contributors/${enrollmentId}`)
+  await db.runTransaction(async (tx: Transaction) => {
+    const prevSnap = await tx.get(ref)
+    const prev = prevSnap.exists ? prevSnap.data()! : null
+    tx.set(ref, {
+      enrollmentId,
+      text,
+      origin,
+      // Vinculado a la versión vigente de la evidencia.
+      evidenceId: (d.currentEvidenceId as string | null) ?? null,
+      createdBy: uid,
+      createdAt: Timestamp.now(),
+    })
+    if (prev && prev.text !== text) {
+      tx.set(db.collection('deliveryHistory').doc(), {
+        deliveryId,
+        courseId: d.courseId,
+        ownerEnrollmentId: d.ownerEnrollmentId,
+        milestoneId: d.milestoneId,
+        kind: 'contribution',
+        enrollmentId,
+        previous: prev.text as string,
+        next: text,
+        changedBy: uid,
+        changedAt: Timestamp.now(),
+      })
+    }
+  })
+  return { status: 'ok' }
+})
+
+/**
+ * Confirmación docente de un ítem de la evidencia mínima del bloque (M2/M5).
+ * Es **juicio docente**: el servidor no interpreta el contenido del archivo; solo registra
+ * quién confirmó qué y cuándo, vinculado a la **versión vigente** de la evidencia.
+ */
+export const confirmChecklistItem = onCall(async (request) => {
+  const uid = assertSignedIn(request)
+  const deliveryId = String(request.data?.deliveryId ?? '')
+  const itemIndex = Number(request.data?.itemIndex)
+
+  const dSnap = await db.doc(`deliveries/${deliveryId}`).get()
+  if (!dSnap.exists) throw new HttpsError('not-found', 'Entrega inexistente.')
+  const d = dSnap.data()!
+  await assertTeacherOfCourse(uid, d.courseId as string)
+  if (d.state !== 'pending_review') {
+    throw new HttpsError('failed-precondition', 'Solo se confirma la evidencia mínima de una entrega «por revisar».')
+  }
+  if (!d.currentEvidenceId) throw new HttpsError('failed-precondition', 'La entrega no tiene evidencia vigente.')
+
+  const msSnap = await db.doc(`milestones/${d.milestoneId}`).get()
+  const checklist = (msSnap.data()?.evidenceChecklist as string[]) ?? []
+  if (!Number.isInteger(itemIndex) || itemIndex < 0 || itemIndex >= checklist.length) {
+    throw new HttpsError('invalid-argument', 'Ítem de evidencia mínima inválido.')
+  }
+
+  await db.collection(`deliveries/${deliveryId}/checklistConfirmations`).add({
+    itemIndex,
+    text: checklist[itemIndex],
+    evidenceId: d.currentEvidenceId,
+    confirmedBy: uid,
+    confirmedAt: Timestamp.now(),
   })
   return { status: 'ok' }
 })

@@ -56,10 +56,11 @@ npm run dev
 - **I2c:** **reapertura segura** y regla de **«no evaluado»** (XP narrativo vs competencia), y **subida de archivos** en la misión 2 (`reserveUpload` + Storage + `submitEvidence` con verificación real, progreso y limpieza de huérfanos).
 - **I2d:** **seis misiones funcionales** (consigna, evidencia, indicadores, hito, XP y modalidades según Fases 6–7; total 160 XP) y **robustez de archivos** (bucket efectivo, limpieza confirmada, reintento sin huérfanos).
 - **I2e:** **autorización** de `submitEvidence` antes de responder, **modalidades** en Functions, **contribución individual** para el XP de equipos, contrato de **M1** (diagnóstico/barrera), **plantillas** accesibles y **descarga autorizada** (sin enlaces persistentes).
-- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`, `docs/I2b-RESULTADOS.md`, `docs/I2c-RESULTADOS.md`, `docs/I2d-RESULTADOS.md`, `docs/I2e-RESULTADOS.md`.
+- **I2f:** cierre de contratos (**confirmación docente de la evidencia mínima** M2/M5 ligada a versión, **aportes de equipo** con curso/estado/versión, **limpieza redundante** segura) y **preparación de piloto** (matriz de salida + configuraciones verificables).
+- Modelo y contratos: `docs/I0d-MODELO-FIRESTORE.md`. Informes: `docs/I0e-RESULTADOS.md`, `docs/I1a-RESULTADOS.md`, `docs/I1b-RESULTADOS.md`, `docs/I1c-RESULTADOS.md`, `docs/I2a-RESULTADOS.md`, `docs/I2b-RESULTADOS.md`, `docs/I2c-RESULTADOS.md`, `docs/I2d-RESULTADOS.md`, `docs/I2e-RESULTADOS.md`, `docs/I2f-RESULTADOS.md`.
 
 ```bash
-npm run emu:test        # 79 pruebas de emulador + 39 de navegador
+npm run emu:test        # 83 pruebas de emulador + 39 de navegador
 npm run emu:start       # emuladores + app en modo interactivo
 ```
 
@@ -118,7 +119,8 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - **I2c:** reapertura segura, regla de «no evaluado» (XP narrativo vs competencia) y subida de archivos en la misión 2 con reserva, verificación y limpieza de huérfanos.
 - **I2d:** seis misiones funcionales (consigna, evidencia, indicadores, hito y XP según Fases 6–7; 160 XP) con entrega textual/archivo y equivalencia.
 - **I2e:** autorización y modalidades en Functions, contribución individual en equipos, contrato de M1, plantillas accesibles y descarga autorizada.
-- **Fuera de alcance todavía:** revisión pedagógica del contenido, prueba con estudiantes, App Check exigido, proveedor institucional docente, retención/consentimiento, despliegue y datos reales.
+- **I2f:** confirmación docente de la evidencia mínima, aportes de equipo con versionado y limpieza redundante segura; matriz de salida de Fase 10 y preparación de piloto documentadas.
+- **Fuera de alcance todavía:** activación de App Check/secreto/identidad docente institucional, revisión pedagógica, accesibilidad manual, retención/consentimiento, despliegue y datos reales.
 
 ## Informes
 
@@ -135,6 +137,10 @@ Usa la barra **«Demo (fixtures)»** en la parte superior para alternar entre:
 - `docs/I2d-RESULTADOS.md` — seis misiones funcionales y robustez de archivos.
 - `docs/I2e-RESULTADOS.md` — autorización, coherencia pedagógica y lectura de archivos.
 - `docs/I2e-INDICADORES-Y-PLANTILLAS.md` — indicadores observados, consignas y plantillas.
+- `docs/I2f-RESULTADOS.md` — cierre de contratos y preparación de piloto.
+- `docs/I2f-MATRIZ-SALIDA-FASE-10.md` — matriz de salida (criterio · evidencia · estado).
+- `docs/I2f-PREPARACION-PILOTO.md` — App Check, secreto, identidad docente, presupuesto, limpieza, retención.
+- `docs/I2f-ACCESIBILIDAD-MANUAL.md` — protocolo de verificación con lector de pantalla (pendiente).
 - `docs/I2c-COSTOS-Y-RETENCION.md` — costos/cuotas estimados y retención propuesta.
 - `docs/I2a-ENTREGA-EQUIVALENTE-PAPEL.md` — procedimiento de entrega equivalente (papel/audio).
 - `docs/I0d-MODELO-FIRESTORE.md` — modelo de documentos, índices y reglas.

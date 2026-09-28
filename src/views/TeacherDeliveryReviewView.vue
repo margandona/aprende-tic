@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAsync } from '../composables/useAsync'
 import {
+  confirmChecklistItem,
   correctAssessment,
   fetchDeliveryReview,
   fetchEvidenceBlob,
@@ -44,8 +45,10 @@ watch(
     if (!value) return
     for (const m of value.members) {
       for (const code of value.indicatorCodes) {
-        const a = value.assessments.find((x) => x.enrollmentId === m.enrollmentId && x.indicatorCode === code)
         const k = keyOf(m.enrollmentId, code)
+        // No sobrescribir lo que el docente ya editó (p. ej., al recargar tras confirmar un ítem).
+        if (draft[k]) continue
+        const a = value.assessments.find((x) => x.enrollmentId === m.enrollmentId && x.indicatorCode === code)
         draft[k] = {
           level: a?.level ?? 'not_evaluated',
           comment: a?.comment ?? '',
@@ -146,6 +149,25 @@ async function reabrir(): Promise<void> {
   }
 }
 
+function confirmedItem(i: number): boolean {
+  return (data.value?.checklistConfirmations ?? []).some((c) => c.itemIndex === i)
+}
+
+async function confirmarItem(i: number): Promise<void> {
+  if (!data.value) return
+  busy.value = true
+  submitError.value = ''
+  try {
+    await confirmChecklistItem({ deliveryId: deliveryId.value, itemIndex: i })
+    notify('Evidencia mínima confirmada (juicio docente).')
+    await reload()
+  } catch {
+    submitError.value = 'No se pudo confirmar el ítem.'
+  } finally {
+    busy.value = false
+  }
+}
+
 async function verArchivo(path: string): Promise<void> {
   try {
     const url = URL.createObjectURL(await fetchEvidenceBlob(path))
@@ -236,9 +258,18 @@ async function cambiarXp(xpEventId: string, revoked: boolean): Promise<void> {
         <h2 id="val-h">Valoración por indicador</h2>
         <p class="hint">«No evaluado» es un estado distinto de una valoración baja.</p>
         <template v-if="data.evidenceChecklist.length">
-          <p class="hint"><strong>Verifica la evidencia mínima del bloque antes de acreditar el XP:</strong></p>
+          <p class="hint">
+            <strong>Verifica y confirma la evidencia mínima del bloque antes de acreditar el XP.</strong>
+            La confirmación es tu juicio docente; el servidor no interpreta el contenido.
+          </p>
           <ul class="checklist">
-            <li v-for="(c, i) in data.evidenceChecklist" :key="i">{{ c }}</li>
+            <li v-for="(c, i) in data.evidenceChecklist" :key="i" :data-item="i">
+              <span>{{ c }}</span>
+              <span v-if="confirmedItem(i)" class="ok" role="status">✔ Confirmado</span>
+              <button v-else type="button" class="btn btn--secondary" :disabled="busy" @click="confirmarItem(i)">
+                Confirmar ítem {{ i + 1 }}
+              </button>
+            </li>
           </ul>
         </template>
         <fieldset v-for="m in data.members" :key="m.enrollmentId" class="member">
@@ -375,6 +406,14 @@ label {
   padding-left: var(--rt-space-4);
   color: var(--rt-text-muted);
   font-size: var(--rt-font-size-sm);
+}
+.checklist li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rt-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--rt-space-1);
 }
 .error {
   color: #7f1d1d;

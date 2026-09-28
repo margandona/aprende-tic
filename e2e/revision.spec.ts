@@ -40,6 +40,10 @@ test.describe('I2b · ciclo de revisión de la misión 2', () => {
     await page.locator('#lvl-enr-s7-D1').selectOption('achieved')
     await page.locator('#str-enr-s7-D1').fill('Contrasta la autoría de las fuentes.')
     await page.locator('#nxt-enr-s7-D1').fill('Verificar la fecha antes de decidir.')
+    // Evidencia mínima del bloque (M2): se confirma antes de validar.
+    await page.getByRole('button', { name: 'Confirmar ítem 1' }).click()
+    await expect(page.getByText('Evidencia mínima confirmada (juicio docente).')).toBeVisible()
+    await page.getByRole('button', { name: 'Confirmar ítem 2' }).click()
     await page.getByRole('button', { name: 'Validar hito' }).click()
     await expect(page.getByText(/Hito validado/)).toBeVisible()
     await expect(page.getByText(/· 35 XP ·/)).toBeVisible()
@@ -105,6 +109,8 @@ test.describe('I2b · ciclo de revisión de la misión 2', () => {
     await expect(page.getByText(/registro docente \(equivalencia\)/)).toBeVisible()
     await expect(page.getByText(/Lectura guiada/)).toBeVisible()
     await page.locator('#lvl-enr-s8-D1').selectOption('achieved')
+    await page.getByRole('button', { name: 'Confirmar ítem 1' }).click()
+    await page.getByRole('button', { name: 'Confirmar ítem 2' }).click()
     await page.getByRole('button', { name: 'Validar hito' }).click()
     await expect(page.getByText(/Hito validado/)).toBeVisible()
 

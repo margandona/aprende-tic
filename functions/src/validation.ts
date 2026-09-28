@@ -115,12 +115,30 @@ export const validateMilestone = onCall(async (request) => {
       for (const m of teamMembers) {
         if (!byEnrollment.has(m)) throw new HttpsError('failed-precondition', 'Faltan integrantes del equipo.')
       }
-      // Fase 7: el XP por integrante exige contribución propia registrada.
+      // Fase 7: el XP por integrante exige contribución propia vinculada a la versión vigente.
       for (const enr of byEnrollment.keys()) {
         const cSnap = await tx.get(db.doc(`deliveries/${deliveryId}/contributors/${enr}`))
-        if (!cSnap.exists) {
-          throw new HttpsError('failed-precondition', `Falta la contribución individual de ${enr}.`)
+        const c = cSnap.data()
+        if (!cSnap.exists || c?.evidenceId !== d.currentEvidenceId) {
+          throw new HttpsError('failed-precondition', `Falta la contribución individual de ${enr} para la versión vigente.`)
         }
+      }
+    }
+
+    // Evidencia mínima del bloque (M2/M5): el docente debe confirmar **cada** ítem de la
+    // versión vigente. El servidor no interpreta el contenido: solo exige la confirmación.
+    const checklist = (milestone.evidenceChecklist as string[]) ?? []
+    if (checklist.length > 0) {
+      const confSnap = await tx.get(
+        db.collection(`deliveries/${deliveryId}/checklistConfirmations`).where('evidenceId', '==', d.currentEvidenceId),
+      )
+      const confirmed = new Set(confSnap.docs.map((x: QueryDocumentSnapshot) => x.data().itemIndex as number))
+      const missing = checklist.map((_, i) => i).filter((i) => !confirmed.has(i))
+      if (missing.length > 0) {
+        throw new HttpsError(
+          'failed-precondition',
+          'Falta la confirmación docente de la evidencia mínima del bloque. Usa «Pedir ajuste» si corresponde.',
+        )
       }
     }
 

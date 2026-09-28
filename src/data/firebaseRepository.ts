@@ -706,6 +706,7 @@ export interface DeliveryReview {
   evidenceChecklist: string[]
   currentEvidenceId: string | null
   adjustment: { action: string; at: string | null } | null
+  checklistConfirmations: { itemIndex: number; evidenceId: string; confirmedBy: string; confirmedAt: string | null }[]
   evidences: DeliveryEvidenceVersion[]
   members: { enrollmentId: string; pseudonym: string }[]
   assessments: DeliveryAssessment[]
@@ -754,9 +755,15 @@ export async function fetchDeliveryReview(deliveryId: string): Promise<DeliveryR
     }),
   )
 
-  const [asSnap, xpSnap] = await Promise.all([
+  const [asSnap, xpSnap, confSnap] = await Promise.all([
     getDocs(query(collection(db, 'assessments'), where('courseId', '==', courseId), where('milestoneId', '==', milestoneId))),
     getDocs(query(collection(db, 'xpEvents'), where('courseId', '==', courseId), where('milestoneId', '==', milestoneId))),
+    getDocs(
+      query(
+        collection(db, `deliveries/${deliveryId}/checklistConfirmations`),
+        where('evidenceId', '==', (d.currentEvidenceId as string | null) ?? ''),
+      ),
+    ),
   ])
   const memberSet = new Set(memberIds)
   const assessments: DeliveryAssessment[] = asSnap.docs
@@ -801,6 +808,15 @@ export async function fetchDeliveryReview(deliveryId: string): Promise<DeliveryR
     evidenceChecklist: (msSnap.data()?.evidenceChecklist as string[]) ?? [],
     currentEvidenceId: (d.currentEvidenceId as string | null) ?? null,
     adjustment: d.adjustment ? { action: (d.adjustment as Data).action as string, at: toIso((d.adjustment as Data).at) } : null,
+    checklistConfirmations: confSnap.docs.map((c) => {
+      const x = c.data() as Data
+      return {
+        itemIndex: (x.itemIndex as number) ?? 0,
+        evidenceId: (x.evidenceId as string) ?? '',
+        confirmedBy: (x.confirmedBy as string) ?? '',
+        confirmedAt: toIso(x.confirmedAt),
+      }
+    }),
     evidences,
     members,
     assessments,
@@ -878,6 +894,11 @@ export async function validateDelivery(input: {
 
 export async function requestAdjustment(input: { deliveryId: string; action: string }): Promise<void> {
   await httpsCallable(functions, 'requestAdjustment')(input)
+}
+
+/** Confirma (juicio docente) un ítem de la evidencia mínima del bloque, ligado a la versión vigente. */
+export async function confirmChecklistItem(input: { deliveryId: string; itemIndex: number }): Promise<void> {
+  await httpsCallable(functions, 'confirmChecklistItem')(input)
 }
 
 /** Reapertura segura (pending_review o achieved → in_progress) con historial y acción opcional. */
