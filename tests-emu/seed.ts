@@ -23,8 +23,17 @@ export const IDS = {
   courseX: 'course-x',
   courseY: 'course-y',
   mission1: 'mission-1',
+  mission2: 'mission-2',
+  mission3: 'mission-3',
+  mission4: 'mission-4',
+  mission5: 'mission-5',
+  mission6: 'mission-6',
   milestone1: 'milestone-1',
   milestone2: 'milestone-2',
+  milestone3: 'milestone-3',
+  milestone4: 'milestone-4',
+  milestone5: 'milestone-5',
+  milestone6: 'milestone-6',
   indicatorD1: 'D1',
   indicatorE1: 'E1',
   teamX: 'team-x',
@@ -79,9 +88,20 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc(`courses/${IDS.courseX}`), { institutionId: IDS.institution, name: '1º Medio A', level: '1º medio', year: 2026, programVersionId: IDS.programVersion, status: 'active' })
   b.set(adminDb.doc(`courses/${IDS.courseY}`), { institutionId: IDS.institution, name: '1º Medio B', level: '1º medio', year: 2026, programVersionId: IDS.programVersion, status: 'active' })
 
-  b.set(adminDb.doc(`missions/${IDS.mission1}`), { programVersionId: IDS.programVersion, order: 1, name: 'Abrir el mapa', prompt: '¿Qué sabemos?', status: 'active' })
+  // Seis misiones (Fase 6). I2a conecta la misión 2 «Escuchar la señal» (ficha de necesidad, texto).
+  b.set(adminDb.doc(`missions/${IDS.mission1}`), { programVersionId: IDS.programVersion, order: 1, name: 'Abrir el mapa', prompt: '¿Qué sabemos y qué necesitamos averiguar?', deliverable: 'Diagnóstico y una pregunta abierta para un posible usuario.', status: 'active' })
+  b.set(adminDb.doc(`missions/${IDS.mission2}`), { programVersionId: IDS.programVersion, order: 2, name: 'Escuchar la señal', prompt: '¿Qué problema merece una solución?', deliverable: 'Ficha de necesidad con evidencias y fuentes revisadas.', status: 'active' })
+  b.set(adminDb.doc(`missions/${IDS.mission3}`), { programVersionId: IDS.programVersion, order: 3, name: 'Elegir una ruta', prompt: '¿Qué propuesta ofrece valor?', deliverable: 'Matriz de alternativas, propuesta de valor y plan.', status: 'active' })
+  b.set(adminDb.doc(`missions/${IDS.mission4}`), { programVersionId: IDS.programVersion, order: 4, name: 'Construir el primer puente', prompt: '¿Puede usarla otra persona?', deliverable: 'Prototipo v1 (guía, tutorial o microtaller).', status: 'active' })
+  b.set(adminDb.doc(`missions/${IDS.mission5}`), { programVersionId: IDS.programVersion, order: 5, name: 'Probar el puente', prompt: '¿Qué ocurre al probarla?', deliverable: 'Registro de prueba y versión 2.', status: 'active' })
+  b.set(adminDb.doc(`missions/${IDS.mission6}`), { programVersionId: IDS.programVersion, order: 6, name: 'Compartir la ruta', prompt: '¿Qué aprendimos y qué valor creamos?', deliverable: 'Presentación, postest y reflexión individual.', status: 'active' })
+
   b.set(adminDb.doc(`milestones/${IDS.milestone1}`), { missionId: IDS.mission1, order: 1, title: 'Diagnóstico', xpValue: 20, indicatorCodes: [IDS.indicatorD1, IDS.indicatorE1] })
-  b.set(adminDb.doc(`milestones/${IDS.milestone2}`), { missionId: IDS.mission1, order: 2, title: 'Necesidad', xpValue: 20, indicatorCodes: [IDS.indicatorD1] })
+  b.set(adminDb.doc(`milestones/${IDS.milestone2}`), { missionId: IDS.mission2, order: 1, title: 'Ficha de necesidad', xpValue: 20, indicatorCodes: [IDS.indicatorD1] })
+  b.set(adminDb.doc(`milestones/${IDS.milestone3}`), { missionId: IDS.mission3, order: 1, title: 'Matriz de alternativas', xpValue: 20, indicatorCodes: [IDS.indicatorD1] })
+  b.set(adminDb.doc(`milestones/${IDS.milestone4}`), { missionId: IDS.mission4, order: 1, title: 'Prototipo v1', xpValue: 20, indicatorCodes: [IDS.indicatorD1] })
+  b.set(adminDb.doc(`milestones/${IDS.milestone5}`), { missionId: IDS.mission5, order: 1, title: 'Registro de prueba', xpValue: 25, indicatorCodes: [IDS.indicatorD1] })
+  b.set(adminDb.doc(`milestones/${IDS.milestone6}`), { missionId: IDS.mission6, order: 1, title: 'Presentación y reflexión', xpValue: 20, indicatorCodes: [IDS.indicatorE1] })
   b.set(adminDb.doc(`indicators/${IDS.indicatorD1}`), { code: 'D1', axis: 'D', name: 'Buscar y valorar información' })
   b.set(adminDb.doc(`indicators/${IDS.indicatorE1}`), { code: 'E1', axis: 'E', name: 'Detectar una oportunidad' })
   b.set(adminDb.doc('badges/badge-1'), { code: 'escucha', name: 'Escucha activa', criterion: 'Diferencia necesidad de suposición.' })
@@ -142,6 +162,12 @@ export async function seedSynthetic(): Promise<void> {
   b.set(adminDb.doc('deliveries/xc-course'), {
     courseId: IDS.courseX, ownerEnrollmentId: IDS.s1, milestoneId: IDS.milestone1, scope: 'team',
     teamId: IDS.teamY, state: 'in_progress', currentEvidenceId: null, evidenceCount: 0,
+    createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+  })
+  // Entrega de otro curso (course Y) para probar el aislamiento entre cursos.
+  b.set(adminDb.doc(`deliveries/${IDS.s3}_${IDS.milestone2}`), {
+    courseId: IDS.courseY, ownerEnrollmentId: IDS.s3, milestoneId: IDS.milestone2, scope: 'individual',
+    teamId: null, state: 'in_progress', currentEvidenceId: null, evidenceCount: 0,
     createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
   })
 

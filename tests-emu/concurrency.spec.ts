@@ -66,6 +66,22 @@ describe('Concurrencia · reintentos simultáneos', () => {
     expect(statuses.filter((x) => x === 'rate_limited').length).toBeGreaterThan(0)
   })
 
+  it('dos envíos concurrentes con claves distintas crean una sola versión', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })
+    const start = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')
+    const { deliveryId } = (await start({ milestoneId: IDS.milestone1 })).data
+    const submit = httpsCallable<{ deliveryId: string; submitKey: string; format: string; description: string }, { evidenceId: string }>(s.functions, 'submitEvidence')
+
+    const results = await Promise.allSettled([
+      submit({ deliveryId, submitKey: 'd1', format: 'text', description: 'a' }),
+      submit({ deliveryId, submitKey: 'd2', format: 'text', description: 'b' }),
+    ])
+    expect(results.filter((r) => r.status === 'fulfilled').length).toBe(1)
+    const evs = await adminDb.collection(`deliveries/${deliveryId}/evidence`).get()
+    expect(evs.size).toBe(1)
+  })
+
   it('startDelivery concurrente no reinicia la entrega', async () => {
     const s = await studentClient()
     await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS2 })

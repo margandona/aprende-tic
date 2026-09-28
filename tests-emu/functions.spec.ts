@@ -348,4 +348,64 @@ describe('Diagnóstico · encuesta, respuestas, envío y revisión', () => {
     expect(typeof ok.data.token).toBe('string')
     await expect(signIn({ code: 'NO-EXISTE' })).rejects.toThrow()
   })
+
+  it('no permite iniciar ni enviar el postest no validado', async () => {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code: IDS.codeS4 })
+    await expect(httpsCallable(s.functions, 'startDiagnosisAttempt')({ kind: 'post' })).rejects.toThrow()
+    // Un intento post creado fuera de la función tampoco puede enviarse.
+    await adminDb.doc(`diagnosisAttempts/${IDS.s4}_post`).set({
+      courseId: IDS.courseX, enrollmentId: IDS.s4, kind: 'post', diagnosisVersionId: 'post-v1', status: 'draft',
+    })
+    await expect(httpsCallable(s.functions, 'submitDiagnosisAttempt')({ attemptId: `${IDS.s4}_post` })).rejects.toThrow()
+  })
+})
+
+describe('Misión y entrega de texto (I2a)', () => {
+  async function startMissionFor(code: string, milestoneId = IDS.milestone2) {
+    const s = await studentClient()
+    await httpsCallable(s.functions, 'redeemCode')({ code })
+    const { deliveryId } = (
+      await httpsCallable<{ milestoneId: string }, { deliveryId: string }>(s.functions, 'startDelivery')({ milestoneId })
+    ).data
+    return { s, deliveryId }
+  }
+
+  it('registra la entrega de texto y conserva versiones al reenviar tras reabrir', async () => {
+    const { s, deliveryId } = await startMissionFor(IDS.codeS4)
+    const submit = httpsCallable<{ deliveryId: string; submitKey: string; format: string; description: string }, { version: number }>(s.functions, 'submitEvidence')
+    const v1 = await submit({ deliveryId, submitKey: 't1', format: 'text', description: 'Ficha v1' })
+    expect(v1.data.version).toBe(1)
+    expect((await adminDb.doc(`deliveries/${deliveryId}`).get()).data()?.state).toBe('pending_review')
+
+    // El docente reabre el hito; el estudiante envía una segunda versión.
+    const t = await teacherClient(IDS.t1)
+    await httpsCallable(t.functions, 'reopenMilestone')({ deliveryId })
+    const v2 = await submit({ deliveryId, submitKey: 't2', format: 'text', description: 'Ficha v2' })
+    expect(v2.data.version).toBe(2)
+
+    const evs = await adminDb.collection(`deliveries/${deliveryId}/evidence`).get()
+    expect(evs.size).toBe(2)
+    expect(evs.docs.map((d) => d.data().version).sort()).toEqual([1, 2])
+  })
+
+  it('aísla las entregas entre estudiantes: cada uno tiene su propio documento', async () => {
+    const a = await startMissionFor(IDS.codeS4)
+    const b = await startMissionFor(IDS.codeS5)
+    expect(a.deliveryId).not.toBe(b.deliveryId)
+    const da = await adminDb.doc(`deliveries/${a.deliveryId}`).get()
+    const db2 = await adminDb.doc(`deliveries/${b.deliveryId}`).get()
+    expect(da.data()?.ownerEnrollmentId).toBe(IDS.s4)
+    expect(db2.data()?.ownerEnrollmentId).toBe(IDS.s5)
+    expect(da.data()?.courseId).toBe(IDS.courseX)
+  })
+
+  it('no permite enviar la entrega de otro estudiante', async () => {
+    const { deliveryId } = await startMissionFor(IDS.codeS4)
+    const other = await studentClient()
+    await httpsCallable(other.functions, 'redeemCode')({ code: IDS.codeS5 })
+    await expect(
+      httpsCallable(other.functions, 'submitEvidence')({ deliveryId, submitKey: 'x', format: 'text', description: 'ajena' }),
+    ).rejects.toThrow()
+  })
 })

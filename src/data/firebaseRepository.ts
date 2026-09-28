@@ -213,17 +213,36 @@ export async function fetchLearnings(): Promise<LearningsData> {
   })
 }
 
+export interface MissionEvidenceVersion {
+  evidenceId: string
+  version: number
+  origin: string
+  format: string
+  testModality: string
+  description: string
+  createdAt: string | null
+}
+
 export interface MissionDetailData {
   mission: Mission | null
+  milestone: { id: string; title: string; xpValue: number; indicatorCodes: string[] } | null
+  deliveryId: string | null
   progress: MissionProgress | null
   evidence: Data | null
+  versions: MissionEvidenceVersion[]
+}
+
+function toIso(value: unknown): string | null {
+  const t = value as { toDate?: () => Date } | undefined
+  return t && typeof t.toDate === 'function' ? t.toDate().toISOString() : null
 }
 
 export async function fetchMissionDetail(missionId: string): Promise<MissionDetailData> {
+  const empty: MissionDetailData = { mission: null, milestone: null, deliveryId: null, progress: null, evidence: null, versions: [] }
   const b = session.binding
-  if (!b) return { mission: null, progress: null, evidence: null }
+  if (!b) return empty
   await gate()
-  if (demo.state === 'empty') return { mission: null, progress: null, evidence: null }
+  if (demo.state === 'empty') return empty
 
   return guarded(async () => {
     const mSnap = await getDoc(doc(db, 'missions', missionId))
@@ -231,29 +250,152 @@ export async function fetchMissionDetail(missionId: string): Promise<MissionDeta
 
     let progress: MissionProgress | null = null
     let evidence: Data | null = null
+    let deliveryId: string | null = null
+    let milestone: MissionDetailData['milestone'] = null
+    const versions: MissionEvidenceVersion[] = []
+
     const msSnap = await getDocs(query(collection(db, 'milestones'), where('missionId', '==', missionId)))
-    const milestone = msSnap.docs[0]
-    if (milestone) {
+    const msDoc = msSnap.docs.sort((a, c) => (a.data().order as number) - (c.data().order as number))[0]
+    if (msDoc) {
+      const ms = msDoc.data()
+      milestone = {
+        id: msDoc.id,
+        title: ms.title as string,
+        xpValue: (ms.xpValue as number) ?? 0,
+        indicatorCodes: (ms.indicatorCodes as string[]) ?? [],
+      }
       // Consulta (no getDoc) para no leer una entrega inexistente.
       const dSnap = await getDocs(
         query(
           collection(db, 'deliveries'),
           where('ownerEnrollmentId', '==', b.enrollmentId),
-          where('milestoneId', '==', milestone.id),
+          where('milestoneId', '==', msDoc.id),
         ),
       )
       const docSnap = dSnap.docs[0]
       if (docSnap) {
+        deliveryId = docSnap.id
         const d = docSnap.data()
-        progress = { missionId, state: (d.state as MissionProgress['state']) ?? 'not_started', evidenceId: (d.currentEvidenceId as string | null) ?? null }
-        if (d.currentEvidenceId) {
-          const ev = await getDoc(doc(db, `deliveries/${docSnap.id}/evidence/${d.currentEvidenceId as string}`))
-          if (ev.exists()) evidence = ev.data() as Data
+        progress = {
+          missionId,
+          state: (d.state as MissionProgress['state']) ?? 'not_started',
+          evidenceId: (d.currentEvidenceId as string | null) ?? null,
+        }
+        const evSnap = await getDocs(collection(db, `deliveries/${docSnap.id}/evidence`))
+        for (const ev of evSnap.docs) {
+          const e = ev.data() as Data
+          versions.push({
+            evidenceId: ev.id,
+            version: (e.version as number) ?? 0,
+            origin: (e.origin as string) ?? 'student_digital',
+            format: (e.format as string) ?? 'text',
+            testModality: (e.testModality as string) ?? 'not_applicable',
+            description: (e.description as string) ?? '',
+            createdAt: toIso(e.createdAt),
+          })
+        }
+        versions.sort((a, c) => a.version - c.version)
+        const current = versions.find((v) => v.evidenceId === d.currentEvidenceId) ?? versions[versions.length - 1]
+        if (current) {
+          evidence = {
+            description: current.description,
+            origin: current.origin,
+            format: current.format,
+            testModality: current.testModality,
+          }
         }
       }
     }
-    return { mission, progress, evidence }
+    return { mission, milestone, deliveryId, progress, evidence, versions }
   })
+}
+
+export async function startMission(milestoneId: string): Promise<string> {
+  const call = httpsCallable<{ milestoneId: string }, { deliveryId: string }>(functions, 'startDelivery')
+  return (await call({ milestoneId })).data.deliveryId
+}
+
+export async function submitTextEvidence(input: {
+  deliveryId: string
+  submitKey: string
+  description: string
+}): Promise<{ evidenceId: string; version: number; reused: boolean }> {
+  const call = httpsCallable<
+    { deliveryId: string; submitKey: string; format: string; description: string },
+    { evidenceId: string; version: number; reused: boolean }
+  >(functions, 'submitEvidence')
+  return (await call({ ...input, format: 'text' })).data
+}
+
+// ── Lectura docente de entregas pendientes (I2a; sin valoración ni XP) ───────
+
+export interface PendingDelivery {
+  deliveryId: string
+  enrollmentId: string
+  pseudonym: string
+  missionName: string
+  milestoneTitle: string
+  state: string
+  origin: string
+  format: string
+  evidenceDescription: string
+  evidenceVersion: number | null
+  updatedAt: string | null
+}
+
+export async function fetchPendingDeliveries(): Promise<PendingDelivery[]> {
+  const uid = session.uid
+  if (!uid || session.role !== 'teacher') return []
+  const tcs = await getDocs(query(collection(db, 'teacherCourses'), where('teacherUid', '==', uid)))
+  const courseIds = tcs.docs.map((d) => d.data().courseId as string)
+
+  const out: PendingDelivery[] = []
+  for (const courseId of courseIds) {
+    const dSnap = await getDocs(
+      query(collection(db, 'deliveries'), where('courseId', '==', courseId), where('state', '==', 'pending_review')),
+    )
+    for (const d of dSnap.docs) {
+      const data = d.data() as Data
+      const enrollmentId = data.ownerEnrollmentId as string
+      const milestoneId = data.milestoneId as string
+      const [enroll, ms] = await Promise.all([
+        getDoc(doc(db, 'enrollments', enrollmentId)),
+        getDoc(doc(db, 'milestones', milestoneId)),
+      ])
+      const missionId = ms.data()?.missionId as string | undefined
+      const missionSnap = missionId ? await getDoc(doc(db, 'missions', missionId)) : null
+
+      let evidenceDescription = ''
+      let evidenceVersion: number | null = null
+      let origin = ''
+      let format = ''
+      if (data.currentEvidenceId) {
+        const ev = await getDoc(doc(db, `deliveries/${d.id}/evidence/${data.currentEvidenceId as string}`))
+        if (ev.exists()) {
+          const e = ev.data() as Data
+          evidenceDescription = (e.description as string) ?? ''
+          evidenceVersion = (e.version as number) ?? null
+          origin = (e.origin as string) ?? ''
+          format = (e.format as string) ?? ''
+        }
+      }
+
+      out.push({
+        deliveryId: d.id,
+        enrollmentId,
+        pseudonym: (enroll.data()?.pseudonym as string) ?? 'Sin pseudónimo',
+        missionName: (missionSnap?.data()?.name as string) ?? 'Misión',
+        milestoneTitle: (ms.data()?.title as string) ?? 'Hito',
+        state: (data.state as string) ?? 'pending_review',
+        origin,
+        format,
+        evidenceDescription,
+        evidenceVersion,
+        updatedAt: toIso(data.updatedAt),
+      })
+    }
+  }
+  return out.sort((a, c) => a.pseudonym.localeCompare(c.pseudonym))
 }
 
 // ── Diagnóstico (I1b/I1c) ───────────────────────────────────────────────────

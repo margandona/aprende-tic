@@ -170,7 +170,9 @@ export async function revalidateBinding(): Promise<void> {
       session.binding = persisted.binding
       session.role = 'student'
     } else {
+      // El vínculo guardado ya no es válido (revocado/expiración): se cierra la sesión.
       clearSessionLocal()
+      session.invalidated = true
     }
   } catch {
     clearSessionLocal()
@@ -181,6 +183,15 @@ export async function revalidateBinding(): Promise<void> {
 /** Asegura Auth y revalida la sesión una vez por UID. */
 export async function ensureSession(): Promise<void> {
   await ensureAuth()
+  await revalidateBinding()
+}
+
+/**
+ * Fuerza una revalidación del vínculo (al volver a foco o antes de una acción sensible),
+ * sin esperar a la próxima lectura de recurso.
+ */
+export async function refreshSession(): Promise<void> {
+  revalidatedForUid = null
   await revalidateBinding()
 }
 

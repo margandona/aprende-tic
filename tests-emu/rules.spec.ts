@@ -196,6 +196,23 @@ describe('Firestore Rules · aislamiento por curso y rol', () => {
     await assertFails(getDoc(doc(fs(IDS.t1), 'teacherDemoCodes', 'DOCENTE-01')))
     await assertFails(setDoc(doc(fs(IDS.t1), 'teacherDemoCodes', 'DOCENTE-01'), { teacherUid: IDS.t1 }))
   })
+
+  it('la evidencia respeta el aislamiento de la entrega', async () => {
+    await assertSucceeds(getDoc(doc(fs(U.s1), 'deliveries', `${IDS.s1}_${IDS.milestone1}`, 'evidence', 'ev1')))
+    await assertFails(getDoc(doc(fs(U.s2), 'deliveries', `${IDS.s1}_${IDS.milestone1}`, 'evidence', 'ev1')))
+    await assertSucceeds(getDoc(doc(fs(IDS.t1), 'deliveries', `${IDS.s1}_${IDS.milestone1}`, 'evidence', 'ev1')))
+    await assertFails(getDoc(doc(fs(IDS.t2), 'deliveries', `${IDS.s1}_${IDS.milestone1}`, 'evidence', 'ev1')))
+    // La entrega de equipo de la misión 2 la lee un miembro del equipo.
+    await assertSucceeds(getDoc(doc(fs(U.s2), 'deliveries', `${IDS.s1}_${IDS.milestone2}`, 'evidence', 'ev-team')))
+  })
+
+  it('aísla las entregas entre cursos', async () => {
+    // La entrega de S3 es del curso Y: ni el docente ni el estudiante del curso X la leen.
+    await assertFails(getDoc(doc(fs(IDS.t1), 'deliveries', `${IDS.s3}_${IDS.milestone2}`)))
+    await assertFails(getDoc(doc(fs(U.s1), 'deliveries', `${IDS.s3}_${IDS.milestone2}`)))
+    await assertSucceeds(getDoc(doc(fs(IDS.t2), 'deliveries', `${IDS.s3}_${IDS.milestone2}`)))
+    await assertSucceeds(getDoc(doc(fs(U.s3), 'deliveries', `${IDS.s3}_${IDS.milestone2}`)))
+  })
 })
 
 describe('Storage Rules · reserva real de archivos', () => {

@@ -130,6 +130,10 @@ export const startDiagnosisAttempt = onCall(async (request) => {
   const uid = assertSignedIn(request)
   const binding = await getActiveBinding(uid)
   const kind = request.data?.kind === 'post' ? 'post' : 'pre'
+  // El postest paralelo es un borrador NO validado: no puede presentarse como instrumento vigente.
+  if (kind === 'post') {
+    throw new HttpsError('failed-precondition', 'El postest aún no está validado y no puede iniciarse.')
+  }
   const attemptId = `${binding.enrollmentId}_${kind}`
   const ref = db.doc(`diagnosisAttempts/${attemptId}`)
   try {
@@ -202,6 +206,9 @@ export const submitDiagnosisAttempt = onCall(async (request) => {
     if (!snap.exists) throw new HttpsError('not-found', 'Intento inexistente.')
     const a = snap.data()!
     if (a.enrollmentId !== binding.enrollmentId) throw new HttpsError('permission-denied', 'No autorizado.')
+    if (a.kind === 'post') {
+      throw new HttpsError('failed-precondition', 'El postest aún no está validado y no puede enviarse.')
+    }
     if (a.status !== 'draft') throw new HttpsError('failed-precondition', 'El intento ya fue enviado.')
 
     const surveySnap = await tx.get(db.doc(`conditionsSurveys/${binding.enrollmentId}`))
