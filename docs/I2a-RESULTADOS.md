@@ -68,7 +68,7 @@ npm run emu:start       # emuladores + app en modo interactivo
 ## 5. CI
 
 - `.github/workflows/ci.yml` — trabajos `calidad` y **`emuladores`** (Java 21 + Chromium + `npm run emu:test`).
-- **Estado:** pendiente de confirmar la ejecución de este commit (I2a).
+- **Estado confirmado:** ejecución **`36360744874`** (commit `a8f4d4e`): **success** (2 m 21 s), con 57 pruebas de emulador y 25 de navegador en verde.
 
 ---
 
