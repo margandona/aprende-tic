@@ -69,7 +69,7 @@ Cada misión es un recorrido funcional con **consigna, evidencia, indicadores, h
 ## 5. CI
 
 - `.github/workflows/ci.yml` — trabajos `calidad` y **`emuladores`** (Java 21 + Chromium + `npm run emu:test`).
-- **Estado:** pendiente de confirmar la ejecución de este commit (I2d).
+- **Estado confirmado:** ejecución **`36366217472`** (commit `d124189`): **success** (2 m 22 s), con 75 pruebas de emulador y 38 de navegador en verde.
 
 ---
 
